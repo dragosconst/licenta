@@ -3,6 +3,38 @@ import ctypes
 from ctypes import c_int, c_bool
 import ctypes.wintypes
 from ctypes.wintypes import HWND, DWORD
+import numpy as np
+
+def grab_selected_window_contents(wName, w=800, h=600):
+    hwnd = win32gui.FindWindow(None, wName)
+    if not hwnd:
+        raise Exception('Window not found: {}'.format(wName))
+
+    wDC = win32gui.GetWindowDC(hwnd)
+    dcObj = win32ui.CreateDCFromHandle(wDC)
+    cDC = dcObj.CreateCompatibleDC()
+    dataBitMap = win32ui.CreateBitmap()
+    dataBitMap.CreateCompatibleBitmap(dcObj, w, h)
+    cDC.SelectObject(dataBitMap)
+    cDC.BitBlt((0, 0), (w, h), dcObj, (0, 0), win32con.SRCCOPY)
+
+    # convert the raw data into a format opencv can read
+    dataBitMap.SaveBitmapFile(cDC, 'debug.bmp')
+    print("sdsadsaa")
+    signedIntsArray = dataBitMap.GetBitmapBits(True)
+    print(type(signedIntsArray))
+    img = np.frombuffer(signedIntsArray, dtype='uint8')
+    img = img.reshape((h, w, 4))
+    print(img)
+    # free resources
+    dcObj.DeleteDC()
+    cDC.DeleteDC()
+    win32gui.ReleaseDC(hwnd, wDC)
+    win32gui.DeleteObject(dataBitMap.GetHandle())
+
+    # drop alpha channel
+    return img
+
 
 def grab_all_open_windows():
     win_names = []
