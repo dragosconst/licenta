@@ -36,11 +36,34 @@ def grab_selected_window_contents(wName, w=800, h=600):
     # free resources
     dcObj.DeleteDC()
     cDC.DeleteDC()
-    win32gui.ReleaseDC(hwnd, wDC)
+    win32gui.ReleaseDC(hdesk, wDC)
     win32gui.DeleteObject(dataBitMap.GetHandle())
 
     return img
 
+
+def grab_screen_area(x, y, w, h):
+    hdesk = win32gui.GetDesktopWindow()
+    wDC = win32gui.GetWindowDC(hdesk)
+    dcObj = win32ui.CreateDCFromHandle(wDC)
+    cDC = dcObj.CreateCompatibleDC()
+    dataBitMap = win32ui.CreateBitmap()
+    dataBitMap.CreateCompatibleBitmap(dcObj, w, h)
+    cDC.SelectObject(dataBitMap)
+    cDC.BitBlt((0, 0), (w, h), dcObj, (x, y), win32con.SRCCOPY)
+
+    # convert the raw data into a format opencv can read
+    dataBitMap.SaveBitmapFile(cDC, 'debug.bmp')
+    signedIntsArray = dataBitMap.GetBitmapBits(True)
+    img = np.frombuffer(signedIntsArray, dtype='uint8')
+    img = img.reshape((h, w, 4))
+    # free resources
+    dcObj.DeleteDC()
+    cDC.DeleteDC()
+    win32gui.ReleaseDC(hdesk, wDC)
+    win32gui.DeleteObject(dataBitMap.GetHandle())
+
+    return img
 
 def grab_all_open_windows():
     win_names = []

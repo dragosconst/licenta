@@ -1,4 +1,4 @@
-from Windows_utils.windows import grab_all_open_windows, grab_selected_window_contents
+from Windows_utils.windows import grab_all_open_windows, grab_selected_window_contents, grab_screen_area
 import dearpygui.dearpygui as dpg
 import cv2 as cv
 import numpy as np
@@ -14,6 +14,15 @@ MW_H = 630
 FS = 60
 CR_PROCESS = "cr_proc"
 CAM_W_IMG = "cam_img"
+DIM_W = "dimw"
+SC_WH = "dimwh"
+SC_HH = "dimhh"
+SC_STDW = 800
+SC_STDH = 600
+SC_X = "posx"
+SC_Y = "posy"
+SC_W = "screencw"
+SC_C = "screencap"
 img_normalized = None
 video_capture = None
 
@@ -30,39 +39,6 @@ def _change_debug_text(sender, app_data, user_data):
     global DEBUG_STATE
     DEBUG_STATE = not DEBUG_STATE
     dpg.configure_item(user_data, label="Debug mode:" + ("ON" if DEBUG_STATE else "OFF"))
-
-# def get_selected_window_texture(win_name):
-#     if not dpg.does_item_exist(CR_PROC_TEXT):
-#         return
-#     print("aaaaa")
-#     global img_normalized
-#     w = 800
-#     h = 600
-#     img = grab_selected_window_contents(win_name, w, h)
-#     # cv.imshow("img", img)
-#     # cv.waitKey(0)
-#     # cv.destroyAllWindows()
-#     img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
-#     img = img.flatten().astype(np.float32)
-#     img_normalized = img / 255
-#     dpg.set_value(CR_PROC_TEXT, img_normalized)
-#
-# def _change_active_window(sender, app_data, user_data):
-#     global CR_PROCESS, img_normalized
-#     if not dpg.does_item_exist(CR_PROCESS):
-#         with dpg.window(tag=CR_PROCESS):
-#             w = 800
-#             h = 600
-#             img = grab_selected_window_contents(app_data, w, h)
-#             imc = img.copy()
-#             img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
-#             img = img.flatten().astype(np.float32)
-#             img_normalized = img / 255
-#             with dpg.texture_registry(show=False):
-#                 dpg.add_raw_texture(w, h, img_normalized, tag=CR_PROC_TEXT)
-#             dpg.add_image(CR_PROC_TEXT)
-#         dpg.show_item(CR_PROCESS)
-#         print("finished change")
 
 def update_camera():
     if not dpg.does_item_exist(CAM_W_IMG):
@@ -98,14 +74,48 @@ def _capture_camera(sender, app_data, user_data):
         video_capture.open(0)
         dpg.show_item(CAM_W)
 
+def update_screen_area():
+    if not dpg.does_item_exist(DIM_W) or not dpg.is_item_visible(DIM_W):
+        return
+    w = dpg.get_value(SC_WH) if dpg.get_value(SC_WH) > 100 else 100
+    h = dpg.get_value(SC_HH) if dpg.get_value(SC_HH) > 100 else 100
+    x = dpg.get_value(SC_X)
+    y = dpg.get_value(SC_Y)
+    img = grab_screen_area(x, y, w, h)
+    img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
+    img = cv.resize(img, (SC_STDW, SC_STDH))
+    img = img.flatten().astype(np.float32)
+    img_normalized = img / 255
+    dpg.set_value(SC_C, img_normalized)
 
+def _get_screen_area():
+    if not dpg.does_item_exist(DIM_W):
+        with dpg.window(tag=DIM_W, label="Dimensions"):
+            dpg.add_input_int(label="Width", tag=SC_WH, default_value=800)
+            dpg.add_input_int(label="Height", tag=SC_HH, default_value=600)
+            dpg.add_slider_int(label="X pos", tag=SC_X, min_value=0, max_value=1900)
+            dpg.add_slider_int(label="Y pos", tag=SC_Y, min_value=0, max_value=1200)
+        with dpg.window(tag=SC_W, label="Screen Capture"):
+            with dpg.texture_registry(show=False):
+                w = dpg.get_value(SC_WH) if dpg.get_value(SC_WH) > 0 else 1
+                h = dpg.get_value(SC_HH) if dpg.get_value(SC_HH) > 0 else 1
+                x = dpg.get_value(SC_X)
+                y = dpg.get_value(SC_Y)
+                img = grab_screen_area(x, y, w, h)
+                img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
+                img = cv.resize(img, (SC_STDW, SC_STDH))
+                img = img.flatten().astype(np.float32)
+                img_normalized = img / 255
+                dpg.add_raw_texture(SC_STDW, SC_STDH, img_normalized, tag=SC_C, format=dpg.mvFormat_Float_rgba)
+            dpg.add_image(SC_C)
+    else:
+        dpg.show_item(DIM_W)
+        dpg.show_item(SC_W)
 
 def create_main_window(font):
     with dpg.window(tag=MAIN_WINDOW):
-        win_names = grab_all_open_windows()
-        print(win_names)
         dpg.add_button(label="Capture camera", width=MW_W, height=MW_H // 4, callback=_capture_camera)
-        dpg.add_button(label="Select screen area", width=MW_W, height=MW_H // 4)
+        dpg.add_button(label="Select screen area", width=MW_W, height=MW_H // 4, callback=_get_screen_area)
         dpg.add_button(label="Select game", width=MW_W, height=MW_H // 4)
         dpg.add_button(label="Debug mode:ON", width=MW_W, height=MW_H // 4, tag="Debug", callback=_change_debug_text, user_data="Debug")
         dpg.bind_font(font)
