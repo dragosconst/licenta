@@ -5,7 +5,7 @@ import numpy as np
 import threading
 import time
 
-# window names
+# window names and other constants
 MAIN_WINDOW = "Main"
 CAM_W = "cameraw"
 DEBUG_STATE = True
@@ -23,6 +23,7 @@ SC_X = "posx"
 SC_Y = "posy"
 SC_W = "screencw"
 SC_C = "screencap"
+GAMES = ["Blackjack"]
 img_normalized = None
 video_capture = None
 
@@ -52,7 +53,6 @@ def update_camera():
     dpg.set_value(CAM_W_IMG, img_normalized)
 
 def _release_video_capture(sender, app_data, user_data):
-    print("okay")
     video_capture.release()
 
 def _capture_camera(sender, app_data, user_data):
@@ -97,8 +97,8 @@ def _get_screen_area():
             dpg.add_slider_int(label="Y pos", tag=SC_Y, min_value=0, max_value=1200)
         with dpg.window(tag=SC_W, label="Screen Capture"):
             with dpg.texture_registry(show=False):
-                w = dpg.get_value(SC_WH) if dpg.get_value(SC_WH) > 0 else 1
-                h = dpg.get_value(SC_HH) if dpg.get_value(SC_HH) > 0 else 1
+                w = dpg.get_value(SC_WH)
+                h = dpg.get_value(SC_HH)
                 x = dpg.get_value(SC_X)
                 y = dpg.get_value(SC_Y)
                 img = grab_screen_area(x, y, w, h)
@@ -116,7 +116,7 @@ def create_main_window(font):
     with dpg.window(tag=MAIN_WINDOW):
         dpg.add_button(label="Capture camera", width=MW_W, height=MW_H // 4, callback=_capture_camera)
         dpg.add_button(label="Select screen area", width=MW_W, height=MW_H // 4, callback=_get_screen_area)
-        dpg.add_button(label="Select game", width=MW_W, height=MW_H // 4)
+        dpg.add_combo(label="Select game", items=GAMES)
         dpg.add_button(label="Debug mode:ON", width=MW_W, height=MW_H // 4, tag="Debug", callback=_change_debug_text, user_data="Debug")
         dpg.bind_font(font)
 

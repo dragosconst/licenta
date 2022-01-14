@@ -1,7 +1,5 @@
-from GUI.main_window import create_main_window, create_dpg_env, CAM_W, update_camera, update_screen_area
-from Windows_utils.windows import grab_all_open_windows
+from GUI.main_window import create_main_window, create_dpg_env, update_camera, update_screen_area
 import dearpygui.dearpygui as dpg
-import threading
 
 def main():
     main_font = create_dpg_env()
