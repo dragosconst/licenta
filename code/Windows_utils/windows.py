@@ -4,13 +4,23 @@ from ctypes import c_int, c_bool
 import ctypes.wintypes
 from ctypes.wintypes import HWND, DWORD
 import numpy as np
+import time
 
 def grab_selected_window_contents(wName, w=800, h=600):
     hwnd = win32gui.FindWindow(None, wName)
     if not hwnd:
         raise Exception('Window not found: {}'.format(wName))
 
-    wDC = win32gui.GetWindowDC(hwnd)
+    left, top, right, bot = win32gui.GetWindowRect(hwnd)
+    # w = right - left
+    # h = bot - top
+    print(w, h)
+
+    # win32gui.SetForegroundWindow(hwnd)
+    time.sleep(1e-3)
+
+    hdesk = win32gui.GetDesktopWindow()
+    wDC = win32gui.GetWindowDC(hdesk)
     dcObj = win32ui.CreateDCFromHandle(wDC)
     cDC = dcObj.CreateCompatibleDC()
     dataBitMap = win32ui.CreateBitmap()
@@ -20,19 +30,15 @@ def grab_selected_window_contents(wName, w=800, h=600):
 
     # convert the raw data into a format opencv can read
     dataBitMap.SaveBitmapFile(cDC, 'debug.bmp')
-    print("sdsadsaa")
     signedIntsArray = dataBitMap.GetBitmapBits(True)
-    print(type(signedIntsArray))
     img = np.frombuffer(signedIntsArray, dtype='uint8')
     img = img.reshape((h, w, 4))
-    print(img)
     # free resources
     dcObj.DeleteDC()
     cDC.DeleteDC()
     win32gui.ReleaseDC(hwnd, wDC)
     win32gui.DeleteObject(dataBitMap.GetHandle())
 
-    # drop alpha channel
     return img
 
 
