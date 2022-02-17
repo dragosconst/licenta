@@ -1,4 +1,5 @@
 from Windows_utils.windows import grab_all_open_windows, grab_selected_window_contents, grab_screen_area
+from Image_Processing.line_detection import get_lines_in_image
 import dearpygui.dearpygui as dpg
 import cv2 as cv
 import numpy as np
@@ -8,12 +9,14 @@ import time
 # window names and other constants
 MAIN_WINDOW = "Main"
 CAM_W = "cameraw"
+CAM_C = "cameracanny"
 DEBUG_STATE = True
 MW_W = 1000
 MW_H = 630
 FS = 60
 CR_PROCESS = "cr_proc"
 CAM_W_IMG = "cam_img"
+CAM_C_IMG = "cam_c_img"
 DIM_W = "dimw"
 SC_WH = "dimwh"
 SC_HH = "dimhh"
@@ -48,9 +51,13 @@ def update_camera():
     if frame is None:
         return
     img_data = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+    img_data, canny = get_lines_in_image(img_data)
     img_data = img_data.flatten().astype(np.float32)
+    canny = canny.flatten().astype(np.float32)
     img_normalized = img_data / 255
+    canny = canny / 255
     dpg.set_value(CAM_W_IMG, img_normalized)
+    dpg.set_value(CAM_C_IMG, canny)
 
 def _release_video_capture(sender, app_data, user_data):
     video_capture.release()
@@ -66,10 +73,14 @@ def _capture_camera(sender, app_data, user_data):
         frame_width = video_capture.get(cv.CAP_PROP_FRAME_WIDTH)
         frame_height = video_capture.get(cv.CAP_PROP_FRAME_HEIGHT)
 
-        with dpg.window(tag=CAM_W, on_close=_release_video_capture):
+        with dpg.window(tag=CAM_W, on_close=_release_video_capture, label="Camera"):
             with dpg.texture_registry(show=False):
-                dpg.add_raw_texture(frame_width, frame_height, img_normalized, tag=CAM_W_IMG, format=dpg.mvFormat_Float_rgb)
+                dpg.add_ratexture(frame_width, frame_height, img_normalized, tag=CAM_W_IMG, format=dpg.mvFormat_Float_rgb)
             dpg.add_image(CAM_W_IMG)
+        with dpg.window(tag=CAM_C, label="Camera"):
+            with dpg.texture_registry(show=False):
+                dpg.add_raw_texture(frame_width, frame_height, img_normalized, tag=CAM_C_IMG, format=dpg.mvFormat_Float_rgb)
+            dpg.add_image(CAM_C_IMG)
     else:
         video_capture.open(0)
         dpg.show_item(CAM_W)
@@ -91,8 +102,8 @@ def update_screen_area():
 def _get_screen_area():
     if not dpg.does_item_exist(DIM_W):
         with dpg.window(tag=DIM_W, label="Dimensions"):
-            dpg.add_input_int(label="Width", tag=SC_WH, default_value=800)
-            dpg.add_input_int(label="Height", tag=SC_HH, default_value=600)
+            dpg.add_slider_int(label="Width", tag=SC_WH, default_value=800, min_value=100, max_value=1000)
+            dpg.add_slider_int(label="Height", tag=SC_HH, default_value=600, min_value=100, max_value=1000)
             dpg.add_slider_int(label="X pos", tag=SC_X, min_value=0, max_value=1900)
             dpg.add_slider_int(label="Y pos", tag=SC_Y, min_value=0, max_value=1200)
         with dpg.window(tag=SC_W, label="Screen Capture"):
