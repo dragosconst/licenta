@@ -1,6 +1,7 @@
 import os
 import glob
 import pdb
+from functools import cmp_to_key
 import xml.etree.ElementTree as ET
 import numpy as np
 from pathlib import Path
@@ -8,6 +9,11 @@ import cv2 as cv
 from tqdm import tqdm
 
 from global_constants import CARD_WIDTH, CARD_HEIGHT
+
+"""
+This script was used to handle sorting through the unmodified datasets I've gathered from the internet or from
+my own photos.
+"""
 
 possible_classes = {"Ac", "Ad", "Ah", "As",
                     "1c", "1d", "1h", "1s",
@@ -93,6 +99,7 @@ def load_xmls(path, name):
     np.savetxt(output_name, np.array(content), fmt='%s')
 
 # flag for datasets where we should ignore non-digits, due to unstandard representations for letters
+# separate_img_path refers to the dataset that has its images and annotations stored in separate folders
 def write_labels(file_path, ignore_non_digits=False, separate_img_path=None):
     final_path = os.path.join(Path(os.getcwd()).parents[1], "data\\")
     labels_fname = "train_labels_RAW.txt"
@@ -134,6 +141,10 @@ def write_labels(file_path, ignore_non_digits=False, separate_img_path=None):
                     fw.write(separate_img_path + "\\" + img_name + ".jpg" + "," + final_cls + "," + xmin + "," + ymin + "," + xmax + "," + ymax + "\n")
 
 
+# due to EXIF metadata, images will appear rotated in the labelimg program
+# BUT are not actually rotated!!! I had to use a special software that automatically rotates images captured with a phone
+# camera, however this lead to my labels being all wrong. fortunately, using this function I managed to rotate all wrong
+# labels to the new, correct format. outside of this case, this function is entirely useless
 def reverse_xml(path):
     xml_files = glob.glob(os.path.join(path, '*.xml'))
     image_files = glob.glob(os.path.join(path, '*.jpg'))
@@ -153,14 +164,14 @@ def reverse_xml(path):
             # xmin.text, ymin.text = ymin.text, xmin.text
             # xmax.text, ymax.text = ymax.text, xmax.text
             # xmin_t, xmax_t = int(xmin.text), int(xmax.text)
-            # xmin.text = str(img.shape[1] - xmax_)
-            # xmax.text = str( - int(xmax.text) + img.shape[1])
-            xmin.text = str(max(min(int(xmin.text), img.shape[1]), 0))
-            ymin.text = str(max(min(int(ymin.text), img.shape[0]), 0))
-            xmax.text = str(max(min(int(xmax.text), img.shape[1]), 0))
-            ymax.text = str(max(min(int(ymax.text), img.shape[0]), 0))
-            if int(xmin.text) > int(xmax.text):
-                xmin.text, xmax.text = xmax.text, xmin.text
+            # xmin.text = str(img.shape[1] - xmin_t)
+            # # xmax.text = str( - xmax_t + img.shape[1])
+            # xmin.text = str(max(min(int(xmin.text), img.shape[1]), 0))
+            # ymin.text = str(max(min(int(ymin.text), img.shape[0]), 0))
+            # xmax.text = str(max(min(int(xmax.text), img.shape[1]), 0))
+            # ymax.text = str(max(min(int(ymax.text), img.shape[0]), 0))
+            # if int(xmin.text) > int(xmax.text):
+            #     xmin.text, xmax.text = xmax.text, xmin.text
         tree.write(xml_file)
 
 # simply run some statistics to get an idea of current, un-augmented dataset
@@ -191,6 +202,32 @@ def dataset_statistics_unaugmented():
         for cls in final_results:
             print(f"Class {cls} has {final_results[cls]} examples.")
 
+def dataset_statistics_augmented():
+    final_path = os.path.join(Path(os.getcwd()).parents[1], "data\\")
+    labels_fname = "train_labels_RAW.txt"
+
+    with open(final_path + labels_fname, "r") as f:
+        lines = f.readlines()
+        final_results = dict()
+        for line in lines:
+            img_name, cls, *_ = line.split(",")
+            if cls not in final_results:
+                final_results[cls] = 20
+            else:
+                final_results[cls] += 20
+        sum = 0
+        for cls in final_results:
+            sum += final_results[cls]
+        mean = sum/(len(final_results))
+        sum = 0
+        for cls in final_results:
+            sum += (final_results[cls] - mean) ** 2
+        variance = sum / (len(final_results))
+        print(f"Average examples per class is {mean}")
+        print(f"Variance is {variance}")
+        for cls in final_results:
+            print(f"Class {cls} has {final_results[cls]} examples.")
+
 def write_unaugmented():
     with open(os.path.join(Path(os.getcwd()).parents[1], "data\\train_labels_RAW.txt"), "r") as f:
         lines = f.readlines()
@@ -202,6 +239,19 @@ def write_unaugmented():
             print(img_source.shape, xmin, ymin, xmax, ymax)
             cv.imwrite(os.path.join(Path(os.getcwd()).parents[1], "data\\train_imgs\\" + str(lindex) + ".jpg"),
                        img_source[ymin:ymax, xmin:xmax])
+
+def write_full_unaugmented():
+    with open(os.path.join(Path(os.getcwd()).parents[1], "data\\train_labels_RAW.txt"), "r") as f:
+        lines = f.readlines()
+        def cmp_lines(l1, l2):
+            if l1 < l2:
+                return -1
+            elif l2 > l1:
+                return 1
+            return 0
+        lines = sorted(lines, key=cmp_to_key(cmp_lines))
+        with open(os.path.join(Path(os.getcwd()).parents[1], "data\\train_labels_full.txt"), "w") as fw:
+            fw.writelines(lines)
 
 if __name__ == "__main__":
     DATASET1 = "data\\RAW\\my-stuff\\"
@@ -229,6 +279,8 @@ if __name__ == "__main__":
     #              separate_img_path="D:\\facultate stuff\\licenta\\data\\RAW\\Kaggle-the-complete-playing-card-dataset\\Images\\Images")
     # write_labels(os.path.join(Path(os.getcwd()).parents[1], DATASET4 + DATASET4_LAB_NAMES + "_annotations.txt"), True)
     # dataset_statistics_unaugmented()
+    # dataset_statistics_augmented()
+    # write_full_unaugmented()
     # reverse_xml(os.path.join(Path(os.getcwd()).parents[1], DATASET1))
-    write_unaugmented()
+    # write_unaugmented()
 
