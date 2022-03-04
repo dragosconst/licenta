@@ -15,22 +15,21 @@ This script was used to handle sorting through the unmodified datasets I've gath
 my own photos.
 """
 
-possible_classes = {"Ac", "Ad", "Ah", "As",
-                    "1c", "1d", "1h", "1s",
-                    "2c", "2d", "2h", "2s",
-                    "3c", "3d", "3h", "3s",
-                    "4c", "4d", "4h", "4s",
-                    "5c", "5d", "5h", "5s",
-                    "6c", "6d", "6h", "6s",
-                    "7c", "7d", "7h", "7s",
-                    "8c", "8d", "8h", "8s",
-                    "9c", "9d", "9h", "9s",
-                    "10c", "10d", "10h", "10s",
-                    "Jc", "Jd", "Jh", "Js",
-                    "Qc", "Qd", "Qh", "Qs",
-                    "Kc", "Kd", "Kh", "Ks",
-                    "JOKER_red", "JOKER_black"
-                    "not a card"
+possible_classes = {"Ac": 0, "Ad": 1, "Ah": 2, "As": 3,
+                    "2c": 4, "2d": 5, "2h": 6, "2s": 7,
+                    "3c": 8, "3d": 9, "3h": 10, "3s": 11,
+                    "4c": 12, "4d": 13, "4h": 14, "4s": 15,
+                    "5c": 16, "5d": 17, "5h": 18, "5s": 19,
+                    "6c": 20, "6d": 21, "6h": 22, "6s": 23,
+                    "7c": 24, "7d": 25, "7h": 26, "7s": 27,
+                    "8c": 28, "8d": 29, "8h": 30, "8s": 31,
+                    "9c": 32, "9d": 33, "9h": 34, "9s": 35,
+                    "10c": 36, "10d": 37, "10h": 38, "10s": 39,
+                    "Jc": 40, "Jd": 41, "Jh": 42, "Js": 43,
+                    "Qc": 44, "Qd": 45, "Qh": 46, "Qs": 47,
+                    "Kc": 48, "Kd": 49, "Kh": 50, "Ks": 51,
+                    "JOKER_red": 52, "JOKER_black": 53,
+                    "not a card": 54
                     } # set of all possible classes
 all_classes = {
                 "Ac": ["Ac", "AC", "ace of clubs"], "Ad": ["Ad", "AD", "ace of diamonds"],
@@ -101,6 +100,8 @@ def load_xmls(path, name):
 # flag for datasets where we should ignore non-digits, due to unstandard representations for letters
 # separate_img_path refers to the dataset that has its images and annotations stored in separate folders
 def write_labels(file_path, ignore_non_digits=False, separate_img_path=None):
+    global all_classes
+
     final_path = os.path.join(Path(os.getcwd()).parents[1], "data\\")
     labels_fname = "train_labels_RAW.txt"
 
@@ -140,6 +141,22 @@ def write_labels(file_path, ignore_non_digits=False, separate_img_path=None):
                 else:
                     fw.write(separate_img_path + "\\" + img_name + ".jpg" + "," + final_cls + "," + xmin + "," + ymin + "," + xmax + "," + ymax + "\n")
 
+"""
+Path is absolute path to xml files root.
+"""
+def clean_xmls(path):
+    global all_classes
+
+    xml_files = glob.glob(os.path.join(path, "*.xml"))
+    for xml_file in tqdm(xml_files):
+        xml_tree = ET.parse(xml_file)
+        for obj in xml_tree.findall('object'):
+            name = obj.find('name')
+
+            for cls in all_classes:
+                if name.text in all_classes[cls]:
+                    name.text = cls
+            xml_tree.write(xml_file)
 
 # due to EXIF metadata, images will appear rotated in the labelimg program
 # BUT are not actually rotated!!! I had to use a special software that automatically rotates images captured with a phone
@@ -283,4 +300,5 @@ if __name__ == "__main__":
     # write_full_unaugmented()
     # reverse_xml(os.path.join(Path(os.getcwd()).parents[1], DATASET1))
     # write_unaugmented()
+    clean_xmls("D:\\facultate stuff\\licenta\\data\\train_imgs_full\\")
 
