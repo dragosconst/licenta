@@ -6,7 +6,7 @@ from torchvision.models import vgg19
 from torch.nn import functional as F
 from torchvision.models.detection.rpn import AnchorGenerator
 
-from Data_Processing.detection_dataset import PlayingCardsDataset
+from Data_Processing.detection_dataset import PlayingCardsFRCNNDataset
 
 """
 Batches will be lists of (image, targets) tuples, this changes the whole batch into the tuple
@@ -16,8 +16,8 @@ We must do this because this is the format the pytorch Faster R-CNN implementati
 def collate_fn(batch):
     return tuple(zip(*batch))
 
-def load_dataloader(batch_size: int = 16, shuffle: bool = True) -> Tuple[PlayingCardsDataset, torch.utils.data.DataLoader]:
-    dataset = PlayingCardsDataset("D:\\facultate stuff\\licenta\\data\\train_imgs_full\\")
+def load_dataloader(batch_size: int = 16, shuffle: bool = True) -> Tuple[PlayingCardsFRCNNDataset, torch.utils.data.DataLoader]:
+    dataset = PlayingCardsFRCNNDataset("D:\\facultate stuff\\licenta\\data\\train_imgs_full\\")
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=shuffle)
     return dataset, dataloader
 

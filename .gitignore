@@ -2,6 +2,9 @@
 data/
 docs/
 adnotation/
+yolo/
+faster-rcnn/
+code/references/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -15,21 +15,21 @@ This script was used to handle sorting through the unmodified datasets I've gath
 my own photos.
 """
 
-possible_classes = {"Ac": 0, "Ad": 1, "Ah": 2, "As": 3,
-                    "2c": 4, "2d": 5, "2h": 6, "2s": 7,
-                    "3c": 8, "3d": 9, "3h": 10, "3s": 11,
-                    "4c": 12, "4d": 13, "4h": 14, "4s": 15,
-                    "5c": 16, "5d": 17, "5h": 18, "5s": 19,
-                    "6c": 20, "6d": 21, "6h": 22, "6s": 23,
-                    "7c": 24, "7d": 25, "7h": 26, "7s": 27,
-                    "8c": 28, "8d": 29, "8h": 30, "8s": 31,
-                    "9c": 32, "9d": 33, "9h": 34, "9s": 35,
-                    "10c": 36, "10d": 37, "10h": 38, "10s": 39,
-                    "Jc": 40, "Jd": 41, "Jh": 42, "Js": 43,
-                    "Qc": 44, "Qd": 45, "Qh": 46, "Qs": 47,
-                    "Kc": 48, "Kd": 49, "Kh": 50, "Ks": 51,
-                    "JOKER_red": 52, "JOKER_black": 53,
-                    "not a card": 54
+possible_classes = {"Ac": 1, "Ad": 2, "Ah": 3, "As": 4,
+                    "2c": 5, "2d": 6, "2h": 7, "2s": 8,
+                    "3c": 9, "3d": 10, "3h": 11, "3s": 12,
+                    "4c": 13, "4d": 14, "4h": 15, "4s": 16,
+                    "5c": 17, "5d": 18, "5h": 19, "5s": 20,
+                    "6c": 21, "6d": 22, "6h": 23, "6s": 24,
+                    "7c": 25, "7d": 26, "7h": 27, "7s": 28,
+                    "8c": 29, "8d": 30, "8h": 31, "8s": 32,
+                    "9c": 33, "9d": 34, "9h": 35, "9s": 36,
+                    "10c": 37, "10d": 38, "10h": 39, "10s": 40,
+                    "Jc": 41, "Jd": 42, "Jh": 43, "Js": 44,
+                    "Qc": 45, "Qd": 46, "Qh": 47, "Qs": 48,
+                    "Kc": 49, "Kd": 50, "Kh": 51, "Ks": 52,
+                    "JOKER_red": 53, "JOKER_black": 54,
+                    "not a card": 0
                     } # set of all possible classes
 all_classes = {
                 "Ac": ["Ac", "AC", "ace of clubs"], "Ad": ["Ad", "AD", "ace of diamonds"],
