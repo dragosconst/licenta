@@ -8,7 +8,7 @@ import numpy as np
 import cv2 as cv
 
 class RandomAffineBoxSensitive():
-    def __init__(self, degrees: Tuple[int, int], translate: Tuple[float, float]=(0.,0.)
+    def __init__(self, degrees: Tuple[int, int]=(-1, 0), translate: Tuple[float, float]=(0.,0.)
                  ,prob: float=0.5):
         self.degrees = degrees
         self.translate = translate
@@ -18,7 +18,7 @@ class RandomAffineBoxSensitive():
         if random.random() > self.prob:
             return image, target
         h, w = image.shape[-2:]
-        deg = torch.randint(*self.degrees, (1,)).item()
+        deg = torch.randint(*self.degrees, (1,)).item() if self.degrees[0] != -1 else 0
         trans = torch.rand(1).item()
         ta, tb = self.translate
         # ta = (1 - trans) * (-w * ta) + trans * (w * ta)
@@ -43,8 +43,6 @@ class RandomAffineBoxSensitive():
             y4_ = (y4 - center[1]) * np.cos(deg) + (x4 - center[0]) * np.sin(deg) + center[1]
             target["boxes"][idx] = torch.Tensor((np.min((x1_, x2_, x3_, x4_)), np.min((y1_, y2_, y3_, y4_)),
                                     np.max((x1_, x2_, x3_, x4_)), np.max((y1_, y2_, y3_, y4_))))
-            # target["boxes"][idx] =torch.Tensor( (x1_, y1_, x2_, y2_))
-            # target["boxes"][idx] = F.rotate(box, deg)
         max_dx = float(ta * w)
         max_dy = float(tb * h)
         tx = int(round(torch.empty(1).uniform_(-max_dx, max_dx).item()))
@@ -55,10 +53,10 @@ class RandomAffineBoxSensitive():
         image = F.affine(img=image,angle=0, translate=trans, scale=1, shear=[0., 0.])
         for idx, box in enumerate(target["boxes"]):
             x1, y1, x2, y2 = box
-            x1_ = min(max(x1 + ta, 0), w)
-            y1_ = min(max(y1 + tb, 0), h)
-            x2_ = min(max(x2 + ta, 0), w)
-            y2_ = min(max(y2 + tb, 0), h)
+            x1_ = min(max(x1 + tx, 0), w)
+            y1_ = min(max(y1 + ty, 0), h)
+            x2_ = min(max(x2 + tx, 0), w)
+            y2_ = min(max(y2 + ty, 0), h)
             target["boxes"][idx] = torch.Tensor((x1_, y1_, x2_, y2_))
 
         # the boxes are most likely rhombuses by now - find the minimal rectangle that covers the bounding rhombuses

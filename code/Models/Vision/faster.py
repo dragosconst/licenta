@@ -156,7 +156,7 @@ if __name__ == "__main__":
             axs[0, i].imshow(np.asarray(img))
     drawn_boxes = draw_bounding_boxes(transforms.ConvertImageDtype(torch.uint8)(img), targets["boxes"], colors="red")
     show(drawn_boxes)
-    img, targets = RandomAffineBoxSensitive((0, 45), prob=1)(img, targets)
+    # img, targets = RandomAffineBoxSensitive(degrees=(0, 90), translate=(0.3, 0.1), prob=1)(img, targets)
     drawn_boxes = draw_bounding_boxes(transforms.ConvertImageDtype(torch.uint8)(img), targets["boxes"], colors="red")
     show(drawn_boxes)
     plt.show()
