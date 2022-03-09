@@ -157,6 +157,7 @@ if __name__ == "__main__":
     drawn_boxes = draw_bounding_boxes(transforms.ConvertImageDtype(torch.uint8)(img), targets["boxes"], colors="red")
     show(drawn_boxes)
     # img, targets = RandomAffineBoxSensitive(degrees=(0, 90), translate=(0.3, 0.1), prob=1)(img, targets)
+    img, targets = RandomPerspectiveBoxSensitive(dist_scale=0.6, prob=1.0)(img, targets)
     drawn_boxes = draw_bounding_boxes(transforms.ConvertImageDtype(torch.uint8)(img), targets["boxes"], colors="red")
     show(drawn_boxes)
     plt.show()

@@ -97,14 +97,15 @@ class RandomPerspectiveBoxSensitive():
         endpoints = [topleft, topright, botright, botleft]
         fill = [float(0)] * F.get_image_num_channels(image)
         image = F.perspective(image, startpoints, endpoints, fill=fill)
-        perspTransform = cv.getPerspectiveTransform(startpoints, endpoints)
+        perspTransform = cv.getPerspectiveTransform(np.asarray(startpoints, dtype=np.float32), np.asarray(endpoints,
+                                                                                                          dtype=np.float32))
         for idx, box in enumerate(target["boxes"]):
             x1, y1, x2, y2 = box
             x3, y3, x4, y4 = x2, y1, x1, y2 # the other two points of the rectangle
-            new_box = cv.perspectiveTransform((x1,y1,x2,y2,x3,y3,x4,y4), perspTransform)
-            x1_, y1_, x2_, y2_, x3_, y3_, x4_, y4_ = new_box
-            target["boxes"][idx] = (np.min((x1_, x2_, x3_, x4_)), np.min((y1_, y2_, y3_, y4_)),
-                                    np.max((x1_, x2_, x3_, x4_)), np.max((y1_, y2_, y3_, y4_)))
+            new_box = cv.perspectiveTransform(np.asarray([((x1,y1),(x2,y2),(x3,y3),(x4,y4))]), perspTransform)
+            (x1_, y1_), (x2_, y2_), (x3_, y3_), (x4_, y4_) = new_box[0]
+            target["boxes"][idx] = torch.as_tensor((np.min((x1_, x2_, x3_, x4_)), np.min((y1_, y2_, y3_, y4_)),
+                                    np.max((x1_, x2_, x3_, x4_)), np.max((y1_, y2_, y3_, y4_))))
             x1, y1, x2, y2 = target["boxes"][idx]
             target["area"][idx] = (x2 - x1) * (y2 - y1)
         return image, target
