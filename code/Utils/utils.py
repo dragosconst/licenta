@@ -5,6 +5,7 @@ import torch.utils.data
 from torchvision.models import vgg19
 from torch.nn import functional as F
 from torchvision.models.detection.rpn import AnchorGenerator
+from torchvision import transforms as T
 
 from Data_Processing.detection_dataset import PlayingCardsFRCNNDataset
 
@@ -23,6 +24,9 @@ def load_dataloader(batch_size: int = 16, shuffle: bool = True) -> Tuple[Playing
 
 def get_loader(dataset: torch.utils.data.Dataset, batch_size: int = 16, shuffle: bool = True):
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=shuffle)
+
+def get_train_trans():
+    transforms = []
 
 def intersection_over_union(bbox_a, bbox_b):
     x_a = max(bbox_a[0], bbox_b[0])

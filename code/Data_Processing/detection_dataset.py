@@ -56,9 +56,20 @@ class PlayingCardsFRCNNDataset(Dataset):
         img = transforms.ToPILImage()(img)
 
         img = F.to_tensor(img)
+        if self.transforms is not None:
+            img, targets = self.transforms(img, targets)
         return img, targets
 
     def __len__(self):
         return len(self.img_fps)
 
-
+    # returns all targets
+    def targets(self):
+        targets = []
+        for idx in range(len(self.img_fps)):
+            if os.path.exists(self.img_fps[idx][:-3] + "xml"):
+                xml = ET.parse(self.img_fps[idx][:-3] + "xml")
+                for obj in xml.findall('object'):
+                    name = obj.find('name').text
+                    targets.append(possible_classes[name])
+        return targets
