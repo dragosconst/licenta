@@ -43,7 +43,7 @@ all_classes = {
                 "4c": ["4c", "4C", "four of clubs"], "4d": ["4d", "4D", "four of diamonds"],
                 "4h": ["4h", "4H", "four of hearts"], "4s": ["4s", "4S", "four of spades"],
                 "5c": ["5c", "5C", "five of clubs"], "5d": ["5d", "5D", "five of diamonds"],
-                "5h": ["5h", "5H", "five of hearts"], "5s": ["5s", "5S", "five of spades"],
+                "5h": ["5h", "5H", "five of hearts"], "5s": ["5s", "5S", "five of spa   des"],
                 "6c": ["6c", "6C", "six of clubs"], "6d": ["6d", "6D", "six of diamonds"],
                 "6h": ["6h", "6H", "six of hearts"], "6s": ["6s", "6S", "six of spades"],
                 "7c": ["7c", "7C", "seven of clubs"], "7d": ["7d", "7D", "seven of diamonds"],

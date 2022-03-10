@@ -31,7 +31,6 @@ def eval(detection, target, iou_thresh: float=0.5):
             continue
         if max_label != label: # detected an objecy, but badly labeled it
             false_positives += 1
-            print("bad label")
             continue
         true_positives += 1
     return true_positives, false_positives

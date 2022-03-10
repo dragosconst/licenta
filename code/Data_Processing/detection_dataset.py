@@ -7,6 +7,7 @@ from torchvision import transforms
 from PIL import Image
 import xml.etree.ElementTree as ET
 from torchvision.transforms import functional as F
+import numpy as np
 
 from Data_Processing.Raw_Train_Data.raw import possible_classes
 
@@ -29,6 +30,8 @@ class PlayingCardsFRCNNDataset(Dataset):
         self.img_fps = sorted(glob.glob(os.path.join(fp, "*.jpg")))
 
     def __getitem__(self, idx):
+        if not isinstance(idx, int):
+            idx = idx[0]
         img = Image.open(self.img_fps[idx]).convert("RGB")
         targets = {"boxes": [], "labels": [], "image_id": [], "area": [], "iscrowd": []}
         if os.path.exists(self.img_fps[idx][:-3] + "xml"):
@@ -69,7 +72,9 @@ class PlayingCardsFRCNNDataset(Dataset):
         for idx in range(len(self.img_fps)):
             if os.path.exists(self.img_fps[idx][:-3] + "xml"):
                 xml = ET.parse(self.img_fps[idx][:-3] + "xml")
+                cr_target = [0] * len(possible_classes)
                 for obj in xml.findall('object'):
                     name = obj.find('name').text
-                    targets.append(possible_classes[name])
+                    cr_target[possible_classes[name]] = 1
+                targets.append(cr_target)
         return targets

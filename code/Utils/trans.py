@@ -7,6 +7,15 @@ import torch
 import numpy as np
 import cv2 as cv
 
+class MyCompose(object):
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, img, target):
+        for trans in self.transforms:
+            img, target = trans(img, target)
+        return img, target
+
 class RandomAffineBoxSensitive():
     def __init__(self, degrees: Tuple[int, int]=(-1, 0), translate: Tuple[float, float]=(0.,0.)
                  ,prob: float=0.5):
@@ -53,10 +62,10 @@ class RandomAffineBoxSensitive():
         image = F.affine(img=image,angle=0, translate=trans, scale=1, shear=[0., 0.])
         for idx, box in enumerate(target["boxes"]):
             x1, y1, x2, y2 = box
-            x1_ = min(max(x1 + tx, 0), w)
-            y1_ = min(max(y1 + ty, 0), h)
-            x2_ = min(max(x2 + tx, 0), w)
-            y2_ = min(max(y2 + ty, 0), h)
+            x1_ = min(max(x1 + tx, 0), w - 2)
+            y1_ = min(max(y1 + ty, 0), h - 2)
+            x2_ = min(max(x2 + tx, 1), w - 1)
+            y2_ = min(max(y2 + ty, 1), h - 1)
             target["boxes"][idx] = torch.Tensor((x1_, y1_, x2_, y2_))
 
         # the boxes are most likely rhombuses by now - find the minimal rectangle that covers the bounding rhombuses
