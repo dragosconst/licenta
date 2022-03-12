@@ -13,7 +13,7 @@ def get_image_files() -> List[str]:
             imgs_fns.append(img_fn)
     return imgs_fns
 
-def get_random_bg_img(imgs_fns) -> Image:
+def get_random_bg_img(imgs_fns) -> Image.Image:
     idx = np.random.randint(0, len(imgs_fns))
     img = Image.open(imgs_fns[idx])
     return img

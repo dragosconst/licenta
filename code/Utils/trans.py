@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Union
 import random
 
 from torchvision import transforms as T
@@ -18,7 +18,7 @@ class MyCompose(object):
 
 class RandomAffineBoxSensitive():
     def __init__(self, degrees: Tuple[int, int]=(-1, 0), translate: Tuple[float, float]=(0.,0.)
-                 ,scale: float=1., prob: float=0.5):
+                 ,scale: Union[float, Tuple[float, float]]=1., prob: float=0.5):
         self.degrees = degrees
         self.translate = translate
         self.scale = scale
@@ -70,14 +70,20 @@ class RandomAffineBoxSensitive():
             target["boxes"][idx] = torch.Tensor((x1_, y1_, x2_, y2_))
 
         # apply scaling
-        image = F.affine(img=image, angle=0, translate=(0, 0), scale=self.scale, shear=[0., 0.])
-        nh, nw = h * self.scale, w * self.scale
+        if isinstance(self.scale, float):
+            scale = self.scale
+        else:
+            scale_f = torch.rand(1).item()
+            smin, smax = self.scale
+            scale = (1 - scale_f) * smin + scale_f * smax
+        image = F.affine(img=image, angle=0, translate=(0, 0), scale=scale, shear=[0., 0.])
+        nh, nw = h * scale, w * scale
         for idx, box in enumerate(target["boxes"]):
             x1, y1, x2, y2 = box
-            x1_ = self.scale * x1
-            y1_ = self.scale * y1
-            x2_ = self.scale * x2
-            y2_ = self.scale * y2
+            x1_ = scale * x1
+            y1_ = scale * y1
+            x2_ = scale * x2
+            y2_ = scale * y2
             x1_ = min(max(x1_ + w//2 - nw//2, 0), w - 2)
             y1_ = min(max(y1_ + h//2 - nh//2, 0), h - 2)
             x2_ = min(max(x2_ + w//2 - nw//2, 0), w - 1)
@@ -88,7 +94,8 @@ class RandomAffineBoxSensitive():
         # area has obviously changed after the transforms, so we need to recalculate it
         for idx, box in enumerate(target["boxes"]):
             x1, y1, x2, y2 = box
-            target["area"][idx] = (x2 - x1) * (y2 - y1)
+            if "area" in target:
+                target["area"][idx] = (x2 - x1) * (y2 - y1)
         return image, target
 
 class RandomPerspectiveBoxSensitive():
@@ -132,5 +139,6 @@ class RandomPerspectiveBoxSensitive():
             target["boxes"][idx] = torch.as_tensor((np.min((x1_, x2_, x3_, x4_)), np.min((y1_, y2_, y3_, y4_)),
                                     np.max((x1_, x2_, x3_, x4_)), np.max((y1_, y2_, y3_, y4_))))
             x1, y1, x2, y2 = target["boxes"][idx]
-            target["area"][idx] = (x2 - x1) * (y2 - y1)
+            if "area" in target:
+                target["area"][idx] = (x2 - x1) * (y2 - y1)
         return image, target
