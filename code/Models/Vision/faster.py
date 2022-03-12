@@ -139,7 +139,7 @@ if __name__ == "__main__":
     targets = dataset.targets()
     indices = np.asarray([x for x in range(len(dataset))])
     indices = indices[..., np.newaxis]
-    train_idx, _, val_idx, _ = iterative_train_test_split(indices[1:], np.asarray(targets), test_size=0.2)
+    train_idx, _, val_idx, _ = iterative_train_test_split(indices, np.asarray(targets), test_size=0.2)
     # val_set, train_set = torch.utils.data.random_split(dataset, [int(len(dataset) * 1/5), int(len(dataset) * 4/5)])
     # indices = torch.randperm(len(dataset)).tolist()
     random.seed(1)
@@ -170,33 +170,24 @@ if __name__ == "__main__":
     # torch.manual_seed(time.time())
     # rand_img = torch.randint(high=4199,size=(1,)).item()
     # print(rand_img)
-    img, targets = dataset[0]
-    img = img.to("cuda")
-    imgs = [img]
-    with torch.inference_mode():
-        print("start pred")
-        pred = frcnn(imgs)
-        print("stop pred")
-        for idx, p in enumerate(pred):
-            filter_under_thresh(p)
-            second_nms(p)
-            print(p)
-            def show(imgs):
-                if not isinstance(imgs, list):
-                    imgs = [imgs]
-                fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
-                for i, img in enumerate(imgs):
-                    img = img.detach()
-                    img = F.to_pil_image(img)
-                    axs[0, i].imshow(np.asarray(img))
-                    axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-
-            drawn_boxes = draw_bounding_boxes(transforms.ConvertImageDtype(torch.uint8)(img.to("cpu")), p["boxes"],
-                                              colors="red")
-            print(len(p["boxes"]))
-            show(drawn_boxes)
-            plt.show()
-            print(targets)
+    # img, targets = dataset[0]
+    # img = img.to("cuda")
+    # imgs = [img]
+    # with torch.inference_mode():
+    #     print("start pred")
+    #     pred = frcnn(imgs)
+    #     print("stop pred")
+    #     for idx, p in enumerate(pred):
+    #         filter_under_thresh(p)
+    #         second_nms(p)
+    #         print(p)
+    #
+    #         drawn_boxes = draw_bounding_boxes(transforms.ConvertImageDtype(torch.uint8)(img.to("cpu")), p["boxes"],
+    #                                           colors="red")
+    #         print(len(p["boxes"]))
+    #         show(drawn_boxes)
+    #         plt.show()
+    #         print(targets)
     # train_fccnn_reference(frcnn, sgd, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
     #             device="cuda", num_epochs=10)
 

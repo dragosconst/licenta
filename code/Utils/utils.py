@@ -25,9 +25,6 @@ def load_dataloader(batch_size: int = 16, shuffle: bool = True) -> Tuple[Playing
 def get_loader(dataset: torch.utils.data.Dataset, batch_size: int = 16, shuffle: bool = True):
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=shuffle)
 
-def get_train_trans():
-    transforms = []
-
 def intersection_over_union(bbox_a, bbox_b):
     x_a = max(bbox_a[0], bbox_b[0])
     y_a = max(bbox_a[1], bbox_b[1])

@@ -18,9 +18,10 @@ class MyCompose(object):
 
 class RandomAffineBoxSensitive():
     def __init__(self, degrees: Tuple[int, int]=(-1, 0), translate: Tuple[float, float]=(0.,0.)
-                 ,prob: float=0.5):
+                 ,scale: float=1., prob: float=0.5):
         self.degrees = degrees
         self.translate = translate
+        self.scale = scale
         self.prob = prob
 
     def __call__(self, image, target):
@@ -68,8 +69,23 @@ class RandomAffineBoxSensitive():
             y2_ = min(max(y2 + ty, 1), h - 1)
             target["boxes"][idx] = torch.Tensor((x1_, y1_, x2_, y2_))
 
-        # the boxes are most likely rhombuses by now - find the minimal rectangle that covers the bounding rhombuses
-        # and recalculate the area
+        # apply scaling
+        image = F.affine(img=image, angle=0, translate=(0, 0), scale=self.scale, shear=[0., 0.])
+        nh, nw = h * self.scale, w * self.scale
+        for idx, box in enumerate(target["boxes"]):
+            x1, y1, x2, y2 = box
+            x1_ = self.scale * x1
+            y1_ = self.scale * y1
+            x2_ = self.scale * x2
+            y2_ = self.scale * y2
+            x1_ = min(max(x1_ + w//2 - nw//2, 0), w - 2)
+            y1_ = min(max(y1_ + h//2 - nh//2, 0), h - 2)
+            x2_ = min(max(x2_ + w//2 - nw//2, 0), w - 1)
+            y2_ = min(max(y2_ + h//2 - nh//2, 0), h - 1)
+            target["boxes"][idx] = torch.Tensor((x1_, y1_, x2_, y2_))
+
+
+        # area has obviously changed after the transforms, so we need to recalculate it
         for idx, box in enumerate(target["boxes"]):
             x1, y1, x2, y2 = box
             target["area"][idx] = (x2 - x1) * (y2 - y1)
