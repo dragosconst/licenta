@@ -31,6 +31,24 @@ possible_classes = {"Ac": 1, "Ad": 2, "Ah": 3, "As": 4,
                     "JOKER_red": 53, "JOKER_black": 54,
                     "not a card": 0
                     } # set of all possible classes
+
+pos_cls_inverse = { 1: "Ac", 2: "Ad", 3: "Ah", 4: "As",
+                    5: "2c", 6: "2d", 7: "2h", 8: "2s",
+                    9: "3c", 10: "3d", 11: "3h", 12: "3s",
+                    13: "4c", 14: "4d", 15: "4h", 16: "4s",
+                    17: "5c", 18: "5d", 19: "5h", 20: "5s",
+                    21: "6c", 22: "6d", 23: "6h", 24: "6s",
+                    25: "7c", 26: "7d", 27: "7h", 28: "7s",
+                    29: "8c", 30: "8d", 31: "8h", 32: "8s",
+                    33: "9c", 34: "9d", 35: "9h", 36: "9s",
+                    37: "10c", 38: "10d", 39: "10h", 40: "10s",
+                    41: "Jc", 42: "Jd", 43: "Jh", 44: "Js",
+                    45: "Qc", 46: "Qd", 47: "Qh", 48: "Qs",
+                    49: "Kc", 50: "Kd", 51: "Kh", 52: "Ks",
+                    53: "JOKER_red", 54: "JOKER_black",
+                    0: "not a card"
+} # inverse set of classes mappings and names in labeling, useful for fast operations
+
 all_classes = {
                 "Ac": ["Ac", "AC", "ace of clubs"], "Ad": ["Ad", "AD", "ace of diamonds"],
                 "Ah": ["Ah", "AH", "ace of hearts"], "As": ["As", "AS", "ace of spades"],

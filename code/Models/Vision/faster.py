@@ -135,6 +135,14 @@ if __name__ == "__main__":
 
     # TODO: filter out the bad labels from the gigantic dataset
     dataset, dataloader = load_dataloader(batch_size=1)
+    sh = 0
+    sw = 0
+    for imgs, targets in tqdm(dataloader):
+        for img in imgs:
+            c, h, w = img.shape
+            sh += h
+            sw += w
+    print(f"{sh/len(dataset)}x{sw/len(dataset)}")
     dataset_test = copy.deepcopy(dataset)
     targets = dataset.targets()
     indices = np.asarray([x for x in range(len(dataset))])

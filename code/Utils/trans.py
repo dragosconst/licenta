@@ -40,6 +40,8 @@ class RandomAffineBoxSensitive():
         deg = np.deg2rad(-deg)
         center = (w//2, h//2)
         M = cv.getRotationMatrix2D(center, deg, 1.0)
+        good_boxes = []
+        good_indices = []
         for idx, box in enumerate(target["boxes"]):
             x1, y1, x2, y2 = box
             x3, y3, x4, y4 = x2, y1, x1, y2 # the other two points of the rectangle
@@ -51,8 +53,18 @@ class RandomAffineBoxSensitive():
             y3_ = (y3 - center[1]) * np.cos(deg) + (x3 - center[0]) * np.sin(deg) + center[1]
             x4_ = - (y4 - center[1]) * np.sin(deg) + (x4 - center[0]) * np.cos(deg) + center[0]
             y4_ = (y4 - center[1]) * np.cos(deg) + (x4 - center[0]) * np.sin(deg) + center[1]
-            target["boxes"][idx] = torch.Tensor((np.min((x1_, x2_, x3_, x4_)), np.min((y1_, y2_, y3_, y4_)),
-                                    np.max((x1_, x2_, x3_, x4_)), np.max((y1_, y2_, y3_, y4_))))
+            new_box = (np.min((x1_, x2_, x3_, x4_)), np.min((y1_, y2_, y3_, y4_)),
+                                    np.max((x1_, x2_, x3_, x4_)), np.max((y1_, y2_, y3_, y4_)))
+            left, top, right, bot = new_box
+            if left <= -10 or top <= -10 or right >= w + 10 or bot >= h + 10: # drop boxes that go out of bounds
+                continue
+            good_boxes.append(torch.as_tensor((left, top, right, bot)))
+            good_indices.append(idx)
+        target["boxes"] = good_boxes
+        if "labels" in target:
+            target["labels"] = target["labels"][good_indices]
+        if "areas" in target:
+            target["areas"] = target["areas"][good_indices]
         max_dx = float(ta * w)
         max_dy = float(tb * h)
         tx = int(round(torch.empty(1).uniform_(-max_dx, max_dx).item()))
@@ -61,13 +73,20 @@ class RandomAffineBoxSensitive():
 
         # apply translation
         image = F.affine(img=image,angle=0, translate=trans, scale=1, shear=[0., 0.])
+        good_boxes = []
+        good_indices = []
         for idx, box in enumerate(target["boxes"]):
             x1, y1, x2, y2 = box
-            x1_ = min(max(x1 + tx, 0), w - 2)
-            y1_ = min(max(y1 + ty, 0), h - 2)
-            x2_ = min(max(x2 + tx, 1), w - 1)
-            y2_ = min(max(y2 + ty, 1), h - 1)
-            target["boxes"][idx] = torch.Tensor((x1_, y1_, x2_, y2_))
+            left, top, right, bot = x1 + tx, y1 + ty, x2 + tx, y2 + ty
+            if left <= -10 or top <= -10 or right >= w + 10 or bot >= h + 10: # drop boxes that go out of bounds
+                continue
+            good_boxes.append(torch.as_tensor((left, top, right, bot)))
+            good_indices.append(idx)
+        target["boxes"] = good_boxes
+        if "labels" in target:
+            target["labels"] = target["labels"][good_indices]
+        if "areas" in target:
+            target["areas"] = target["areas"][good_indices]
 
         # apply scaling
         if isinstance(self.scale, float):
@@ -78,23 +97,29 @@ class RandomAffineBoxSensitive():
             scale = (1 - scale_f) * smin + scale_f * smax
         image = F.affine(img=image, angle=0, translate=(0, 0), scale=scale, shear=[0., 0.])
         nh, nw = h * scale, w * scale
+        good_indices = []
+        good_boxes = []
         for idx, box in enumerate(target["boxes"]):
             x1, y1, x2, y2 = box
-            x1_ = scale * x1
-            y1_ = scale * y1
-            x2_ = scale * x2
-            y2_ = scale * y2
-            x1_ = min(max(x1_ + w//2 - nw//2, 0), w - 2)
-            y1_ = min(max(y1_ + h//2 - nh//2, 0), h - 2)
-            x2_ = min(max(x2_ + w//2 - nw//2, 0), w - 1)
-            y2_ = min(max(y2_ + h//2 - nh//2, 0), h - 1)
-            target["boxes"][idx] = torch.Tensor((x1_, y1_, x2_, y2_))
+            left = scale * x1 + w//2 - nw//2
+            top = scale * y1 + h//2 - nh//2
+            right = scale * x2 + w//2 - nw//2
+            bot = scale * y2 + h//2 - nh//2
+            if left <= -10 or top <= -10 or right >= w + 10 or bot >= h + 10: # drop boxes that go out of bounds
+                continue
+            good_boxes.append(torch.as_tensor((left, top, right, bot)))
+            good_indices.append(idx)
+        target["boxes"] = good_boxes
+        if "labels" in target:
+            target["labels"] = target["labels"][good_indices]
+        if "areas" in target:
+            target["areas"] = target["areas"][good_indices]
 
 
         # area has obviously changed after the transforms, so we need to recalculate it
-        for idx, box in enumerate(target["boxes"]):
-            x1, y1, x2, y2 = box
-            if "area" in target:
+        if "area" in target:
+            for idx, box in enumerate(target["boxes"]):
+                x1, y1, x2, y2 = box
                 target["area"][idx] = (x2 - x1) * (y2 - y1)
         return image, target
 
@@ -142,3 +167,29 @@ class RandomPerspectiveBoxSensitive():
             if "area" in target:
                 target["area"][idx] = (x2 - x1) * (y2 - y1)
         return image, target
+
+class RandomColorJitterBoxSensitive():
+    def __init__(self, brightness: float=0, contrast: float=0, saturation: float=0, hue: float=0,
+                 prob: float=0.5):
+        self.brightness = brightness
+        self.contrast = contrast
+        self.saturation = saturation
+        self.hue = hue
+        self.prob = prob
+
+    def __call__(self, image, target):
+        if random.random() > self.prob:
+            return image, target
+        rgb_channels = image[:3, :, :]
+        bright_factor = float(torch.empty(1).uniform_(max(0., 1 - self.brightness), self.brightness + 1))
+        rgb_channels = F.adjust_brightness(rgb_channels, bright_factor)
+        contr_factor = float(torch.empty(1).uniform_(max(0., 1 - self.contrast), self.contrast + 1))
+        rgb_channels = F.adjust_contrast(rgb_channels, contr_factor)
+        satur_fact = float(torch.empty(1).uniform_(max(0., 1 - self.saturation), self.saturation + 1))
+        rgb_channels = F.adjust_saturation(rgb_channels, satur_fact)
+        hue_fact = float(torch.empty(1).uniform_(-self.hue, self.hue))
+        rgb_channels = F.adjust_hue(rgb_channels, hue_fact)
+        image[:3, :, :] = rgb_channels
+
+        return image, target
+
