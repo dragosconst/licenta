@@ -313,10 +313,10 @@ if __name__ == "__main__":
     # write_labels(os.path.join(Path(os.getcwd()).parents[1], DATASET3 + DATASET3_LAB_NAMES + "_annotations.txt"),
     #              separate_img_path="D:\\facultate stuff\\licenta\\data\\RAW\\Kaggle-the-complete-playing-card-dataset\\Images\\Images")
     # write_labels(os.path.join(Path(os.getcwd()).parents[1], DATASET4 + DATASET4_LAB_NAMES + "_annotations.txt"), True)
-    # dataset_statistics_unaugmented()
+    dataset_statistics_unaugmented()
     # dataset_statistics_augmented()
     # write_full_unaugmented()
     # reverse_xml(os.path.join(Path(os.getcwd()).parents[1], DATASET1))
     # write_unaugmented()
-    clean_xmls("D:\\facultate stuff\\licenta\\data\\train_imgs_full\\")
+    # clean_xmls("D:\\facultate stuff\\licenta\\data\\train_imgs_full\\")
 

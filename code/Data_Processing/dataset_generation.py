@@ -172,13 +172,21 @@ def gen_dataset_from_dir(root_dir: str, dest_dir: str, num_datasets: int, prob_d
     datasets = [i for i in range(num_datasets)]
     bg_file_dir = get_image_files()
 
+
+    card_classes = [i for i in range(1, 55)]
+    card_bins = [1 for i in range(1, 55)]
+    card_total = 54
+    card_prob = [1/54 for i in range(1, 55)]
     for i in tqdm(range(num_imgs)):
         num_cards = np.random.randint(low=2, high=6)
 
         cards = []
         # get the cards
         for ci in range(num_cards):
-            card = np.random.randint(low=1, high=55)
+            card_prb, card_cls = zip(*sorted(zip(card_prob, card_classes)))
+            card_cls = list(card_cls)
+            card_cls.reverse()
+            card = np.random.choice(card_cls, p=card_prb)
             dataset = np.random.choice(datasets, p=prob_datasets)
             if dataset == 0:
                 dataset = ""
@@ -197,39 +205,45 @@ def gen_dataset_from_dir(root_dir: str, dest_dir: str, num_datasets: int, prob_d
 
         # generate the new image
         img, targets = generate_random_image(*cards, bg_image=bg_image)
-        # img = np.array(img)
-        # img = torch.from_numpy(img)
-        # img = img.permute(2, 0, 1) # i have to do this weird incantantion because torch won't recognize the PIL image by itself for some reason
+        for card in targets["labels"]:
+            card = card.item()
+            card_bins[card - 1] += 1
+            card_total += 1
+        card_total -= card_bins[possible_classes["JOKER_red"] - 1]
+        card_bins[possible_classes["JOKER_red"] - 1] = card_bins[possible_classes["JOKER_black"] - 1]
+        card_total += card_bins[possible_classes["JOKER_black"] - 1]
+        card_prob = [card_val/card_total for card_val in card_bins] # update probabilities
         write_annotation(dest_dir, str(i), img.size[::-1], targets)
         img.save(os.path.join(dest_dir, str(i) + ".jpg"))
 
+def dataset_statistics(dataset_path: str) -> None:
+    files = glob.glob(os.path.join(dataset_path, "*.xml"))
+    final_results = {}
+
+    for file in tqdm(files):
+        xml_stuff = parse_xml(file)
+        for cls, *box in xml_stuff:
+            if cls in final_results:
+                final_results[cls] += 1
+            else:
+                final_results[cls] = 1
+    for cls in possible_classes:
+        if cls not in final_results:
+            continue
+        print(f"Class {cls} has {final_results[cls]} examples.")
+    sum = 0
+    for cls in final_results:
+        sum += final_results[cls]
+    mean = sum / (len(final_results))
+    sum = 0
+    for cls in final_results:
+        sum += (final_results[cls] - mean) ** 2
+    variance = sum / (len(final_results))
+    print(f"Mean of dataset is {mean}.")
+    print(f"Variance of dataset is {variance}.")
 
 
 if __name__ == "__main__":
-    gen_dataset_from_dir("../../data/RAW/my-stuff-cropped/", "../../data/my_stuff_augm/", num_datasets=2,
-                         prob_datasets=[0.7, 0.3], num_imgs=100)
-    # bg_image = get_random_bg_img(get_image_files())
-    # # img, targets = generate_random_image()
-    # imgs_data = []
-    # for i in range(5):
-    #     imgs_data.append(get_random_img("D:\\facultate stuff\\licenta\\data\\RAW\\my-stuff-cropped"))
-    # res, res_data = generate_random_image(*imgs_data, bg_image=bg_image)
-    # res = np.array(res)
-    # res = torch.from_numpy(res)
-    # res = res.permute(2, 0, 1)
-    # def show(imgs):
-    #     if not isinstance(imgs, list):
-    #         imgs = [imgs]
-    #     fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
-    #     for i, img in enumerate(imgs):
-    #         img = img.detach()
-    #         img = F.to_pil_image(img)
-    #         axs[0, i].imshow(np.asarray(img))
-    #         axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-    # print(len(res_data["boxes"]))
-    # drawn_boxes = draw_bounding_boxes(transforms.ConvertImageDtype(torch.uint8)(res), res_data["boxes"],
-    #                                   colors="red")
-    # show(drawn_boxes)
-    # write_annotation(os.getcwd(), "ahaha", res.size()[1:], res_data)
-    # # transforms.ToPILImage()(res).save("ahaha.jpg")
-    # plt.show()
+    dataset_statistics("../../data/my_stuff_augm/")
+    # gen_dataset_from_dir("../../data/RAW/my-stuff-cropped/", "../../data/my_stuff_augm/", num_datasets=2,
+    #                      prob_datasets=[0.7, 0.3], num_imgs=1000)
