@@ -52,6 +52,7 @@ def load_img_and_xml(fp: str, im_name: str) -> Tuple[Image.Image, Dict[str, torc
     xml_fp = os.path.join(fp, im_name + ".xml")
 
     img = Image.open(im_fp)
+    # img.show()
     targets = parse_xml(xml_fp)
 
     max_dim = np.max(img.size)

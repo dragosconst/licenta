@@ -49,10 +49,14 @@ class PlayingCardsFRCNNDataset(Dataset):
                 targets["labels"].append(possible_classes[name])
                 targets["area"].append((xmax - xmin) * (ymax - ymin))
                 targets["iscrowd"].append(0)
-        targets["boxes"] = torch.as_tensor(targets["boxes"], dtype=torch.float32)
+        if len(targets["boxes"]) > 0:
+            targets["boxes"] = torch.as_tensor(targets["boxes"], dtype=torch.float32)
+            targets["area"] = torch.as_tensor(targets["area"], dtype=torch.float32)
+        else:
+            targets["boxes"] = torch.zeros((0, 4), dtype=torch.float32)
+            targets["area"] = torch.as_tensor(0, dtype=torch.float32)
         targets["labels"] = torch.as_tensor(targets["labels"], dtype=torch.int64)
         targets["image_id"] = torch.Tensor([idx]).type(torch.int64)
-        targets["area"] = torch.as_tensor(targets["area"], dtype=torch.float32)
         targets["iscrowd"] = torch.as_tensor(targets["iscrowd"])
         img = transforms.PILToTensor()(img)
         img = img[:3, :, :] # drop alpha channel, if it exists

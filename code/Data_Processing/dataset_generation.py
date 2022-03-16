@@ -11,6 +11,7 @@ import torchvision.transforms.functional as F
 from torchvision.utils import draw_bounding_boxes
 import torchvision.transforms as transforms
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 from Utils.file_utils import get_image_files, get_random_bg_img, get_random_img, load_img_and_xml
 from Utils.trans import RandomAffineBoxSensitive, RandomPerspectiveBoxSensitive, MyCompose, RandomColorJitterBoxSensitive
@@ -35,9 +36,9 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
 
     card_masks = []
     transforms = MyCompose(
-       (RandomColorJitterBoxSensitive(brightness=0.6, prob=0.4),
-        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.5, 1.5), prob=0.6),
-        RandomPerspectiveBoxSensitive(dist_scale=0.4, prob=0.3))
+       (RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
+        RandomAffineBoxSensitive(degrees=(0, 350), scale=1., prob=0.6),
+        RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3))
     )
     # create the card masks, they will be a couple of black images with cards on them after various transforms
     for (img, data) in cards:
@@ -59,11 +60,10 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
         x_crop = min(x + imw, IM_WIDTH) - x
         y_crop = min(y + imh, IM_HEIGHT) - y
         img = np.asarray(img, dtype=np.uint8)
-        img_full[y:y+imh, x:x+imw, :3] = img[:y_crop, :x_crop, :]
+        img_full[y:y+imh, x:x+imw, :3] = img[:y_crop, :x_crop, :3]
         for i, line in enumerate(img_full[y:y+imh]):
             for j, cell in enumerate(line[x:x+imw]):
-                if (img_full[y+i, x+j, :3] != 0).any():
-                    img_full[y+i, x+j, 3] = 255
+                img_full[y+i, x+j, 3] = 255
 
         img_full = torch.tensor(img_full)
         img_full = img_full.permute(2, 0, 1)
@@ -154,7 +154,7 @@ def write_annotation(fp: str, name: str, shape: Tuple[int, int], data: Dict[str,
 
 
 def gen_dataset_from_dir(root_dir: str, dest_dir: str, num_datasets: int, prob_datasets: List[float],
-                         num_imgs: int=10**4):
+                         cards_to_ignore: List[int]=None, start_from: int=0, num_imgs: int=10**4) -> None:
     """
     Generate a dataset using images from root dir and writing them to dest_dir. It is assumed a dataset contains all 54
     classes, with the possible exception of red Joker.
@@ -162,6 +162,8 @@ def gen_dataset_from_dir(root_dir: str, dest_dir: str, num_datasets: int, prob_d
     :param dest_dir: dest dir of generated dataset
     :param num_datasets: number of different datasets in root dir
     :param prob_datasets: probability of choosing a card from certain dataset
+    :param cards_to_ignore: cards to ignore in generation, useful for balancing datasets
+    :param start_from: where to start from the naming, useful for not rewriting already generated images
     :param num_imgs: how many images to generate
     :return: Nothing, the function will write the images and their annotations to the dest dir
     """
@@ -173,10 +175,17 @@ def gen_dataset_from_dir(root_dir: str, dest_dir: str, num_datasets: int, prob_d
     bg_file_dir = get_image_files()
 
 
-    card_classes = [i for i in range(1, 55)]
-    card_bins = [1 for i in range(1, 55)]
-    card_total = 54
-    card_prob = [1/54 for i in range(1, 55)]
+    if cards_to_ignore is None:
+        card_classes = [i for i in range(1, 55)]
+        card_bins = [1 for i in range(1, 55)]
+        card_total = 54
+        card_prob = [1/54 for i in range(1, 55)]
+    else:
+        card_classes = [i for i in range(1, 55) if i not in cards_to_ignore]
+        card_bins = [1 for i in range(len(card_classes))]
+        card_total = len(card_classes)
+        card_prob = [1/len(card_classes) for i in range(len(card_classes))]
+
     for i in tqdm(range(num_imgs)):
         num_cards = np.random.randint(low=2, high=6)
 
@@ -207,20 +216,24 @@ def gen_dataset_from_dir(root_dir: str, dest_dir: str, num_datasets: int, prob_d
         img, targets = generate_random_image(*cards, bg_image=bg_image)
         for card in targets["labels"]:
             card = card.item()
-            card_bins[card - 1] += 1
+            card_index = card_classes.index(card) # needed only for when balancing datasets
+            # card_index = card - 1 # the regular way to go about it
+            card_bins[card_index] += 1
             card_total += 1
-        card_total -= card_bins[possible_classes["JOKER_red"] - 1]
-        card_bins[possible_classes["JOKER_red"] - 1] = card_bins[possible_classes["JOKER_black"] - 1]
-        card_total += card_bins[possible_classes["JOKER_black"] - 1]
+        # use this piece of code to ignore red jokers for datasets that lack them
+        # also keep in mind it won't work for balancing your dataset
+        # card_total -= card_bins[possible_classes["JOKER_red"] - 1]
+        # card_bins[possible_classes["JOKER_red"] - 1] = card_bins[possible_classes["JOKER_black"] - 1]
+        # card_total += card_bins[possible_classes["JOKER_black"] - 1]
         card_prob = [card_val/card_total for card_val in card_bins] # update probabilities
-        write_annotation(dest_dir, str(i), img.size[::-1], targets)
-        img.save(os.path.join(dest_dir, str(i) + ".jpg"))
+        write_annotation(dest_dir, str(start_from + i), img.size[::-1], targets)
+        img.save(os.path.join(dest_dir, str(start_from + i) + ".jpg"))
 
 def dataset_statistics(dataset_path: str) -> None:
     files = glob.glob(os.path.join(dataset_path, "*.xml"))
     final_results = {}
 
-    for file in tqdm(files):
+    for file in tqdm(files[9000:]):
         xml_stuff = parse_xml(file)
         for cls, *box in xml_stuff:
             if cls in final_results:
@@ -233,17 +246,26 @@ def dataset_statistics(dataset_path: str) -> None:
         print(f"Class {cls} has {final_results[cls]} examples.")
     sum = 0
     for cls in final_results:
+        if cls=="JOKER_red":
+            continue
         sum += final_results[cls]
-    mean = sum / (len(final_results))
+    mean = sum / (len(final_results)-1)
     sum = 0
     for cls in final_results:
+        if cls=="JOKER_red":
+            continue
         sum += (final_results[cls] - mean) ** 2
-    variance = sum / (len(final_results))
+    variance = sum / (len(final_results)-1)
     print(f"Mean of dataset is {mean}.")
     print(f"Variance of dataset is {variance}.")
+
+    plt.bar([key for key in final_results], [val for key, val in final_results.items()])
+    plt.title(f"Data labels spread, mean of {mean} and variance of {variance}")
+    plt.show()
+
 
 
 if __name__ == "__main__":
     dataset_statistics("../../data/my_stuff_augm/")
     # gen_dataset_from_dir("../../data/RAW/my-stuff-cropped/", "../../data/my_stuff_augm/", num_datasets=2,
-    #                      prob_datasets=[0.7, 0.3], num_imgs=1000)
+    #                      prob_datasets=[0.7, 0.3], num_imgs=10, start_from=10500)

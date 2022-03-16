@@ -63,8 +63,8 @@ class RandomAffineBoxSensitive():
         target["boxes"] = good_boxes
         if "labels" in target:
             target["labels"] = target["labels"][good_indices]
-        if "areas" in target:
-            target["areas"] = target["areas"][good_indices]
+        if "area" in target:
+            target["area"] = target["area"][good_indices]
         max_dx = float(ta * w)
         max_dy = float(tb * h)
         tx = int(round(torch.empty(1).uniform_(-max_dx, max_dx).item()))
@@ -85,8 +85,8 @@ class RandomAffineBoxSensitive():
         target["boxes"] = good_boxes
         if "labels" in target:
             target["labels"] = target["labels"][good_indices]
-        if "areas" in target:
-            target["areas"] = target["areas"][good_indices]
+        if "area" in target:
+            target["area"] = target["area"][good_indices]
 
         # apply scaling
         if isinstance(self.scale, float):
@@ -110,10 +110,14 @@ class RandomAffineBoxSensitive():
             good_boxes.append(torch.as_tensor((left, top, right, bot)))
             good_indices.append(idx)
         target["boxes"] = good_boxes
+        if type(target["boxes"]) == list and len(target["boxes"]) > 0:
+            target["boxes"] = torch.stack(target["boxes"])
+        elif len(target["boxes"]) == 0:
+            target["boxes"] = torch.zeros((0, 4), dtype=torch.float32)
         if "labels" in target:
             target["labels"] = target["labels"][good_indices]
-        if "areas" in target:
-            target["areas"] = target["areas"][good_indices]
+        if "area" in target:
+            target["area"] = target["area"][good_indices]
 
 
         # area has obviously changed after the transforms, so we need to recalculate it
