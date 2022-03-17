@@ -35,6 +35,7 @@ from references.engine import train_one_epoch, evaluate
 from Utils.utils import load_dataloader, get_loader
 from Utils.trans import RandomAffineBoxSensitive, RandomPerspectiveBoxSensitive
 from Data_Processing.detection_processing_resnet import second_nms, filter_under_thresh
+from Image_Processing.detection_draw import draw_detection
 
 def train_fccnn_reference(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_dataloader: torch.utils.data.DataLoader,
                           valid_dataloader: torch.utils.data.DataLoader,
@@ -112,6 +113,9 @@ def validate(model: torch.nn.Module, valid_dataloader: torch.utils.data.DataLoad
         detections = [{k: v.to("cpu") for k, v in t.items()} for t in detections]
         # print(f"Targets are {targets}.")
         for detection, target in zip(detections, targets):
+            if len(detection["boxes"]) > 0:
+                filter_under_thresh(detection)
+                second_nms(detection)
             tp, fp = eval(detection, target)
             total_len += len(target["boxes"])
             true_positives += tp
@@ -133,16 +137,17 @@ if __name__ == "__main__":
 
     # TODO: filter out the bad labels from the gigantic dataset
     dataset, dataloader = load_dataloader(batch_size=1)
+    dataset_test = copy.deepcopy(dataset)
     targets = dataset.targets()
     indices = np.asarray([x for x in range(len(dataset))])
     indices = indices[..., np.newaxis]
-    train_idx, _, val_idx, _ = iterative_train_test_split(indices[1:], np.asarray(targets), test_size=0.2)
+    train_idx, _, val_idx, _ = iterative_train_test_split(indices, np.asarray(targets), test_size=0.2)
     # val_set, train_set = torch.utils.data.random_split(dataset, [int(len(dataset) * 1/5), int(len(dataset) * 4/5)])
     # indices = torch.randperm(len(dataset)).tolist()
     random.seed(1)
     torch.manual_seed(1)
     train_set = torch.utils.data.Subset(dataset, train_idx)
-    val_set = torch.utils.data.Subset(dataset, val_idx)
+    val_set = torch.utils.data.Subset(dataset_test, val_idx)
     # train_set = torch.utils.data.Subset(dataset, indices[:100])
     # val_set = torch.utils.data.Subset(dataset, indices[:100])
     # train_set.dataset.transforms = T.MyCompose((RandomAffineBoxSensitive(degrees=(0, 45), prob=0.4),
@@ -163,23 +168,14 @@ if __name__ == "__main__":
     frcnn.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_1K_per_class_enriched.pt"))
     frcnn.eval()
     frcnn.to("cuda")
-    # validate(frcnn, valid_loader, "cuda")
+    validate(frcnn, valid_loader, "cuda")
 
     torch.manual_seed(time.time())
-    rand_img = torch.randint(high=4199,size=(1,)).item()
+    rand_img = torch.randint(high=10000,size=(1,)).item()
     print(rand_img)
-    img, targets = dataset[0]
+    img, targets = dataset[rand_img]
     img = img.to("cuda")
     imgs = [img]
-    def show(imgs):
-        if not isinstance(imgs, list):
-            imgs = [imgs]
-        fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
-        for i, img in enumerate(imgs):
-            img = img.detach()
-            img = F.to_pil_image(img)
-            axs[0, i].imshow(np.asarray(img))
-            axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
     with torch.inference_mode():
         print("start pred")
         pred = frcnn(imgs)
@@ -188,13 +184,9 @@ if __name__ == "__main__":
             filter_under_thresh(p)
             second_nms(p)
             print(p)
+            img_show = draw_detection(transforms.ToPILImage()(img.to("cpu")), p)
+            img_show.show()
 
-            drawn_boxes = draw_bounding_boxes(transforms.ConvertImageDtype(torch.uint8)(img.to("cpu")), p["boxes"],
-                                              colors="red")
-            print(len(p["boxes"]))
-            show(drawn_boxes)
-            plt.show()
-            print(targets)
     # train_fccnn_reference(frcnn, adam, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
     #             device="cuda", num_epochs=5)
     #

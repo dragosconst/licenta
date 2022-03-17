@@ -19,7 +19,6 @@ def second_nms(detection: Dict[str, torch.Tensor]) -> None:
     scores = detection["scores"]
     labels = detection["labels"]
     # the boxes are already sorted according to scores
-    print(scores)
     for idx, box in enumerate(boxes):
         for box2 in boxes[idx+1:]:
             if iou(box, box2) >= 0.3:
@@ -32,18 +31,22 @@ def second_nms(detection: Dict[str, torch.Tensor]) -> None:
             good_boxes.append(box)
             good_scores.append(score)
             good_labels.append(label)
-    detection["boxes"] = torch.stack(good_boxes)
-    detection["scores"] = torch.stack(good_scores)
-    detection["labels"] = torch.stack(good_labels)
+    if len(good_boxes) > 0:
+        detection["boxes"] = torch.stack(good_boxes)
+        detection["scores"] = torch.stack(good_scores)
+        detection["labels"] = torch.stack(good_labels)
+    else:
+        detection["boxes"] = torch.as_tensor([])
+        detection["scores"] = torch.as_tensor([])
+        detection["labels"] = torch.as_tensor([])
 
-
+# in-place operation
 def filter_under_thresh(detection: Dict[str, torch.Tensor]) -> None:
     boxes = detection["boxes"]
     bad_boxes = set()
     scores = detection["scores"]
     labels = detection["labels"]
     # the boxes are already sorted according to scores
-    print(scores)
     for idx, score in enumerate(scores):
         if score < 0.25:
             bad_boxes.add(str(boxes[idx])) # use boxes coordinates because they are the only unique property of bounding boxes
@@ -56,6 +59,11 @@ def filter_under_thresh(detection: Dict[str, torch.Tensor]) -> None:
             good_boxes.append(box)
             good_scores.append(score)
             good_labels.append(label)
-    detection["boxes"] = torch.stack(good_boxes)
-    detection["scores"] = torch.stack(good_scores)
-    detection["labels"] = torch.stack(good_labels)
+    if len(good_boxes) > 0:
+        detection["boxes"] = torch.stack(good_boxes)
+        detection["scores"] = torch.stack(good_scores)
+        detection["labels"] = torch.stack(good_labels)
+    else:
+        detection["boxes"] = torch.as_tensor([])
+        detection["scores"] = torch.as_tensor([])
+        detection["labels"] = torch.as_tensor([])
