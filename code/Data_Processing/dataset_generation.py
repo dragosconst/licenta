@@ -263,9 +263,34 @@ def dataset_statistics(dataset_path: str) -> None:
     plt.title(f"Data labels spread, mean of {mean} and variance of {variance}")
     plt.show()
 
+def resize_dataset(root_dir: str, dest_dir: str, res_factor: float) -> None:
+    files = glob.glob(os.path.join(root_dir, "*.jpg"))
+    for i in tqdm(range(len(files))):
+        file = files[i]
+        img = Image.open(file)
+        xml = parse_xml(file[:-3] + "xml")
 
+        max_dim = np.max(img.size)
+        w, h = img.size
+        img = img.resize((int(w * res_factor), int(h * res_factor)))
+
+        data_dict = {"boxes": [], "labels": []}
+        for cls, *box in xml:
+            x1, y1, x2, y2 = box
+            x1 = int(x1 * res_factor)
+            y1 = int(y1 * res_factor)
+            x2 = int(x2 * res_factor)
+            y2 = int(y2 * res_factor)
+            data_dict["boxes"].append(torch.tensor((x1, y1, x2, y2)))
+            data_dict["labels"].append(torch.tensor([possible_classes[cls]]))
+        if len(data_dict["boxes"]) > 0:
+            data_dict["boxes"] = torch.stack(data_dict["boxes"])
+            data_dict["labels"] = torch.stack(data_dict["labels"])
+        img.save(os.path.join(dest_dir, str(i) + ".jpg"))
+        write_annotation(dest_dir, str(i), img.size[::-1], data_dict)
 
 if __name__ == "__main__":
-    dataset_statistics("../../data/my_stuff_augm/")
+    # dataset_statistics("../../data/my_stuff_augm/")
+    resize_dataset("../../data/my_stuff_augm/", "../../data/my_stuff_augm/resized/", 0.6324553)
     # gen_dataset_from_dir("../../data/RAW/my-stuff-cropped/", "../../data/my_stuff_augm/", num_datasets=2,
     #                      prob_datasets=[0.7, 0.3], num_imgs=10, start_from=10500)

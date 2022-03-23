@@ -21,7 +21,6 @@ from torchvision.ops import MultiScaleRoIAlign
 import torchvision.transforms as transforms
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.faster_rcnn import FasterRCNN
-import Utils.trans as T
 import torchvision.transforms.functional as F
 import matplotlib.pyplot as plt
 import numpy as np
@@ -36,13 +35,23 @@ from Utils.utils import load_dataloader, get_loader
 from Utils.trans import RandomAffineBoxSensitive, RandomPerspectiveBoxSensitive
 from Data_Processing.detection_processing_resnet import second_nms, filter_under_thresh
 from Image_Processing.detection_draw import draw_detection
+import Utils.trans as T
 
 def train_fccnn_reference(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_dataloader: torch.utils.data.DataLoader,
                           valid_dataloader: torch.utils.data.DataLoader,
-                          lr_scheduler: torch.optim.lr_scheduler.MultiStepLR, device: str, num_epochs: int= 30) -> None:
+                          lr_scheduler: torch.optim.lr_scheduler.MultiStepLR, device: str, num_epochs: int= 30,
+                          start_from: int=None) -> None:
+    for p in model.parameters():
+        if p.requires_grad:
+            p.register_hook(lambda grad: torch.clamp(grad, -1, 1))
+
     for epoch in range(num_epochs):
         torch.cuda.empty_cache()
-        train_one_epoch(model, optimizer, train_dataloader, device, epoch, print_freq=10)
+        train_one_epoch(model, optimizer, train_dataloader, device, epoch, print_freq=10, accumulate=16)
+        torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_e" + str(epoch +
+                                                                            (0 if start_from is None else start_from)) +
+            ".pt")
+
         # update learning rate
         lr_scheduler.step()
         # evaluate
@@ -153,8 +162,8 @@ if __name__ == "__main__":
     # train_set.dataset.transforms = T.MyCompose((RandomAffineBoxSensitive(degrees=(0, 45), prob=0.4),
     #                                             RandomPerspectiveBoxSensitive(dist_scale=0.3, prob=0.2)))
 
-    train_loader = get_loader(train_set, batch_size=2, shuffle=True)
-    valid_loader = get_loader(val_set, batch_size=2, shuffle=False)
+    train_loader = get_loader(train_set, batch_size=3, shuffle=True)
+    valid_loader = get_loader(val_set, batch_size=3, shuffle=False)
 
     params = [p for p in frcnn.parameters() if p.requires_grad]
     sgd = SGD(params, lr=0.001, momentum=0.9, weight_decay=0.0005)
@@ -165,31 +174,31 @@ if __name__ == "__main__":
     # train_frcnn(frcnn, adam, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
     #             device="cuda", num_epochs=30)
 
-    frcnn.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_1K_per_class_enriched.pt"))
-    frcnn.eval()
+    frcnn.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_e1back.pt"))
+    # frcnn.eval()
     frcnn.to("cuda")
-    validate(frcnn, valid_loader, "cuda")
+    # validate(frcnn, valid_loader, "cuda")
 
-    torch.manual_seed(time.time())
-    rand_img = torch.randint(high=10000,size=(1,)).item()
-    print(rand_img)
-    img, targets = dataset[rand_img]
-    img = img.to("cuda")
-    imgs = [img]
-    with torch.inference_mode():
-        print("start pred")
-        pred = frcnn(imgs)
-        print("stop pred")
-        for idx, p in enumerate(pred):
-            filter_under_thresh(p)
-            second_nms(p)
-            print(p)
-            img_show = draw_detection(transforms.ToPILImage()(img.to("cpu")), p)
-            img_show.show()
+    # torch.manual_seed(time.time())
+    # rand_img = torch.randint(high=10000,size=(1,)).item()
+    # print(rand_img)
+    # img, targets = dataset[rand_img]
+    # img = img.to("cuda")
+    # imgs = [img]
+    # with torch.inference_mode():
+    #     print("start pred")
+    #     pred = frcnn(imgs)
+    #     print("stop pred")
+    #     for idx, p in enumerate(pred):
+    #         filter_under_thresh(p)
+    #         second_nms(p)
+    #         print(p)
+    #         img_show = draw_detection(transforms.ToPILImage()(img.to("cpu")), p)
+    #         img_show.show()
 
-    # train_fccnn_reference(frcnn, adam, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
-    #             device="cuda", num_epochs=5)
+    train_fccnn_reference(frcnn, adam, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
+                device="cuda", num_epochs=13, start_from=2)
     #
-    # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_1k_per_class_enriched.pt")
+    torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\mobilenet_v3_320_large.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_custom.pt")
