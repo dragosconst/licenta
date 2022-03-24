@@ -15,15 +15,17 @@ import numpy as np
 
 from GUI.main_window import create_main_window, create_dpg_env, update_camera, update_screen_area
 import dearpygui.dearpygui as dpg
-from Models.Vision.faster import train_frcnn, validate, train_fccnn_reference
+from Models.Vision.faster import train_frcnn, validate, train_fccnn_reference, get_faster
 from Utils.utils import load_dataloader, get_loader
 
 def main():
     main_font = create_dpg_env()
     create_main_window(main_font)
+    frcnn = get_faster("../data/frcnn_resnet50_5k_per_class.pt")
+    frcnn.eval()
     while dpg.is_dearpygui_running():
-        update_camera()
-        update_screen_area()
+        update_camera(frcnn)
+        update_screen_area(frcnn)
         dpg.render_dearpygui_frame()
     dpg.destroy_context()
 

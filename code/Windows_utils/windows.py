@@ -1,10 +1,13 @@
+import time
+
 import win32gui, win32ui, win32con
 import ctypes
 from ctypes import c_int, c_bool
 import ctypes.wintypes
 from ctypes.wintypes import HWND, DWORD
+from ctypes import windll
 import numpy as np
-import time
+from PIL import Image
 
 def grab_selected_window_contents(wName, w=800, h=600):
     hwnd = win32gui.FindWindow(None, wName)
@@ -12,8 +15,8 @@ def grab_selected_window_contents(wName, w=800, h=600):
         raise Exception('Window not found: {}'.format(wName))
 
     left, top, right, bot = win32gui.GetWindowRect(hwnd)
-    # w = right - left
-    # h = bot - top
+    w = right - left
+    h = bot - top
     print(w, h)
 
     # win32gui.SetForegroundWindow(hwnd)
@@ -26,13 +29,17 @@ def grab_selected_window_contents(wName, w=800, h=600):
     dataBitMap = win32ui.CreateBitmap()
     dataBitMap.CreateCompatibleBitmap(dcObj, w, h)
     cDC.SelectObject(dataBitMap)
-    cDC.BitBlt((0, 0), (w, h), dcObj, (0, 0), win32con.SRCCOPY)
+    # cDC.BitBlt((0, 0), (w, h), dcObj, (0, 0), win32con.SRCCOPY)
+
+    result = windll.user32.PrintWindow(hwnd, cDC.GetSafeHdc(), 2)
 
     # convert the raw data into a format opencv can read
-    dataBitMap.SaveBitmapFile(cDC, 'debug.bmp')
+    dataInfo = dataBitMap.GetInfo()
+    # dataBitMap.SaveBitmapFile(cDC, 'debug.bmp')
     signedIntsArray = dataBitMap.GetBitmapBits(True)
-    img = np.frombuffer(signedIntsArray, dtype='uint8')
-    img = img.reshape((h, w, 4))
+    img = Image.frombuffer('RGB', (dataInfo["bmWidth"], dataInfo["bmHeight"]), signedIntsArray, 'raw', 'BGRX', 0, 1)
+    img = np.asarray(img)
+    # img = img.reshape((h, w, 3))
     # free resources
     dcObj.DeleteDC()
     cDC.DeleteDC()

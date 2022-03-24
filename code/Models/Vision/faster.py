@@ -133,6 +133,17 @@ def validate(model: torch.nn.Module, valid_dataloader: torch.utils.data.DataLoad
     print(f"Precision is {true_positives / (true_positives + false_positives) if true_positives + false_positives != 0 else 0}.")
     print(f"Recall is {true_positives / total_len}.")
 
+def get_faster(model_path: str) -> torch.nn.Module:
+    frcnn = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True).to("cuda")
+    # frcnn = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn(pretrained=True).to("cuda")  # low res
+    in_features = frcnn.roi_heads.box_predictor.cls_score.in_features
+    # replace the pre-trained head with a new one
+    frcnn.roi_heads.box_predictor = FastRCNNPredictor(in_features, 55).to("cuda")
+    frcnn.load_state_dict(torch.load(model_path))
+    # frcnn.eval()
+    frcnn.to("cuda")
+    return frcnn
+
 # when running this script, train various nets
 if __name__ == "__main__":
     # torch.cuda.empty_cache()

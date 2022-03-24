@@ -15,7 +15,7 @@ def draw_detection(img: Image.Image, detections: Dict[str, torch.Tensor]) -> Ima
 
     img_copy = img.copy()
     draw_obj = ImageDraw.Draw(img_copy)
-    font = ImageFont.truetype("../../data/fonts/NotoSerifCJKjp-Medium.otf", 30)
+    font = ImageFont.truetype("../data/fonts/NotoSerifCJKjp-Medium.otf", 30)
     for box, label in zip(detections["boxes"], detections["labels"]):
         x1, y1, x2, y2 = box.cpu().numpy()
         draw_obj.rectangle((x1, y1, x2, y2), fill=None, outline="red")
