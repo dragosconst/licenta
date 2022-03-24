@@ -38,7 +38,7 @@ SEL_W = "selectw"
 GAMES = ["Blackjack"]
 img_normalized = None
 video_capture = None
-UPDATE_CAMERA_RATE = 3000
+UPDATE_CAMERA_RATE = 1000
 last_camera_update = 0
 dets = []
 selected_window = None
@@ -176,28 +176,28 @@ def get_selected_window_texture(model: torch.nn.Module):
 
     if not dpg.does_item_exist(CR_PROC_TEXT):
         return
-    w = 800
-    h = 600
+    w = 1900
+    h = 1080
     img = grab_selected_window_contents(selected_window, w, h)
-    # img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
-    # img_tensor = torch.from_numpy(img[:, :, :3])
-    # img_tensor = img_tensor.permute(2, 0, 1)
-    # shape = img_tensor.size()[1:]
+    img = cv.cvtColor(img, cv.COLOR_RGB2RGBA)
+    img_tensor = torch.from_numpy(img[:, :, :3])
+    img_tensor = img_tensor.permute(2, 0, 1)
+    shape = img_tensor.size()[1:]
     # img_tensor = torch.from_numpy(np.asarray(T.ToPILImage()(img_tensor).resize((1900, 1080))))
     # img_tensor = img_tensor.permute(2, 0, 1)
-    # if time.time() * 1000 - last_camera_update > UPDATE_CAMERA_RATE: # update every UCR ms the bounding boxes
-    #     last_camera_update = time.time() * 1000
-    #
-    #     img_tensor = T.ConvertImageDtype(torch.float32)(img_tensor)
-    #     img_tensor = img_tensor.to("cuda")
-    #     detections = model(img_tensor.unsqueeze(0))
-    #     dets = detections[0]
-    #     filter_under_thresh(dets)
-    #     second_nms(dets)
-    #
-    # img_pil = draw_detection(T.ToPILImage()(img_tensor), dets)
+    if time.time() * 1000 - last_camera_update > UPDATE_CAMERA_RATE: # update every UCR ms the bounding boxes
+        last_camera_update = time.time() * 1000
+
+        img_tensor = T.ConvertImageDtype(torch.float32)(img_tensor)
+        img_tensor = img_tensor.to("cuda")
+        detections = model(img_tensor.unsqueeze(0))
+        dets = detections[0]
+        filter_under_thresh(dets)
+        second_nms(dets)
+
+    img_pil = draw_detection(T.ToPILImage()(img_tensor), dets)
     # img_pil = img_pil.resize(shape[::-1])
-    # img[:, :, :3] = np.asarray(img_pil)
+    img[:, :, :3] = np.asarray(img_pil)
     img = img.flatten().astype(np.float32)
     img_normalized = img / 255
     dpg.set_value(CR_PROC_TEXT, img_normalized)
@@ -207,8 +207,8 @@ def _change_active_window(sender, app_data, user_data):
 
     if not dpg.does_item_exist(CR_PROCESS):
         with dpg.window(tag=CR_PROCESS):
-            w = 800
-            h = 600
+            w = 1900
+            h = 1080
             selected_window = app_data
             img = grab_selected_window_contents(app_data, w, h)
             imc = img.copy()
