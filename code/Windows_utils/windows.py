@@ -15,8 +15,8 @@ def grab_selected_window_contents(wName, w=800, h=600):
         raise Exception('Window not found: {}'.format(wName))
 
     left, top, right, bot = win32gui.GetWindowRect(hwnd)
-    w = right - left
-    h = bot - top
+    w_wnd = right - left
+    h_wnd = bot - top
     print(w, h)
 
     # win32gui.SetForegroundWindow(hwnd)
@@ -27,7 +27,7 @@ def grab_selected_window_contents(wName, w=800, h=600):
     dcObj = win32ui.CreateDCFromHandle(wDC)
     cDC = dcObj.CreateCompatibleDC()
     dataBitMap = win32ui.CreateBitmap()
-    dataBitMap.CreateCompatibleBitmap(dcObj, w, h)
+    dataBitMap.CreateCompatibleBitmap(dcObj, w_wnd, h_wnd)
     cDC.SelectObject(dataBitMap)
     # cDC.BitBlt((0, 0), (w, h), dcObj, (0, 0), win32con.SRCCOPY)
 
@@ -38,7 +38,9 @@ def grab_selected_window_contents(wName, w=800, h=600):
     # dataBitMap.SaveBitmapFile(cDC, 'debug.bmp')
     signedIntsArray = dataBitMap.GetBitmapBits(True)
     img = Image.frombuffer('RGB', (dataInfo["bmWidth"], dataInfo["bmHeight"]), signedIntsArray, 'raw', 'BGRX', 0, 1)
+    img = img.resize((w, h))
     img = np.asarray(img)
+    print(img.shape)
     # img = img.reshape((h, w, 3))
     # free resources
     dcObj.DeleteDC()

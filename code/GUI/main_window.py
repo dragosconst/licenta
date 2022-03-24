@@ -194,6 +194,9 @@ def _change_active_window(sender, app_data, user_data):
             img = grab_selected_window_contents(app_data, w, h)
             imc = img.copy()
             img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
+            cv.imshow("pppp", img)
+            cv.waitKey(0)
+            cv.destroyAllWindows()
             img = img.flatten().astype(np.float32)
             img_normalized = img / 255
             with dpg.texture_registry(show=False):
