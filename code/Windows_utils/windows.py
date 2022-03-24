@@ -9,7 +9,7 @@ from ctypes import windll
 import numpy as np
 from PIL import Image
 
-def grab_selected_window_contents(wName, w=800, h=600):
+def grab_selected_window_contents(wName, w=800, h=600) -> np.ndarray:
     hwnd = win32gui.FindWindow(None, wName)
     if not hwnd:
         raise Exception('Window not found: {}'.format(wName))

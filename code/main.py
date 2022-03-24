@@ -26,7 +26,7 @@ def main():
     while dpg.is_dearpygui_running():
         update_camera(frcnn)
         update_screen_area(frcnn)
-        get_selected_window_texture()
+        get_selected_window_texture(frcnn)
         dpg.render_dearpygui_frame()
     dpg.destroy_context()
 
