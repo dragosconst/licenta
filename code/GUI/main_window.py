@@ -41,6 +41,7 @@ video_capture = None
 UPDATE_CAMERA_RATE = 1000
 last_camera_update = 0
 dets = []
+selected_window = None
 
 def create_dpg_env():
     dpg.create_context()
@@ -169,28 +170,27 @@ def _get_screen_area():
         dpg.show_item(DIM_W)
         dpg.show_item(SC_W)
 
-def get_selected_window_texture(win_name):
+def get_selected_window_texture():
+    global selected_window, img_normalized
+
     if not dpg.does_item_exist(CR_PROC_TEXT):
         return
-    print("aaaaa")
-    global img_normalized
     w = 800
     h = 600
-    img = grab_selected_window_contents(win_name, w, h)
-    # cv.imshow("img", img)
-    # cv.waitKey(0)
-    # cv.destroyAllWindows()
+    img = grab_selected_window_contents(selected_window, w, h)
     img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
     img = img.flatten().astype(np.float32)
     img_normalized = img / 255
     dpg.set_value(CR_PROC_TEXT, img_normalized)
 
 def _change_active_window(sender, app_data, user_data):
-    global CR_PROCESS, img_normalized
+    global CR_PROCESS, img_normalized, selected_window
+
     if not dpg.does_item_exist(CR_PROCESS):
         with dpg.window(tag=CR_PROCESS):
             w = 800
             h = 600
+            selected_window = app_data
             img = grab_selected_window_contents(app_data, w, h)
             imc = img.copy()
             img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
@@ -203,7 +203,6 @@ def _change_active_window(sender, app_data, user_data):
                 dpg.add_raw_texture(w, h, img_normalized, tag=CR_PROC_TEXT)
             dpg.add_image(CR_PROC_TEXT)
         dpg.show_item(CR_PROCESS)
-        print("finished change")
 
 def create_main_window(font):
     with dpg.window(tag=MAIN_WINDOW):

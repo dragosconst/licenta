@@ -13,7 +13,7 @@ import torchvision.transforms.functional as F
 import matplotlib.pyplot as plt
 import numpy as np
 
-from GUI.main_window import create_main_window, create_dpg_env, update_camera, update_screen_area
+from GUI.main_window import create_main_window, create_dpg_env, update_camera, update_screen_area, get_selected_window_texture
 import dearpygui.dearpygui as dpg
 from Models.Vision.faster import train_frcnn, validate, train_fccnn_reference, get_faster
 from Utils.utils import load_dataloader, get_loader
@@ -26,6 +26,7 @@ def main():
     while dpg.is_dearpygui_running():
         update_camera(frcnn)
         update_screen_area(frcnn)
+        get_selected_window_texture()
         dpg.render_dearpygui_frame()
     dpg.destroy_context()
 

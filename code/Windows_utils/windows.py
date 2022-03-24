@@ -17,7 +17,7 @@ def grab_selected_window_contents(wName, w=800, h=600):
     left, top, right, bot = win32gui.GetWindowRect(hwnd)
     w_wnd = right - left
     h_wnd = bot - top
-    print(w, h)
+    # print(w, h)
 
     # win32gui.SetForegroundWindow(hwnd)
     time.sleep(1e-3)
@@ -40,7 +40,6 @@ def grab_selected_window_contents(wName, w=800, h=600):
     img = Image.frombuffer('RGB', (dataInfo["bmWidth"], dataInfo["bmHeight"]), signedIntsArray, 'raw', 'BGRX', 0, 1)
     img = img.resize((w, h))
     img = np.asarray(img)
-    print(img.shape)
     # img = img.reshape((h, w, 3))
     # free resources
     dcObj.DeleteDC()
