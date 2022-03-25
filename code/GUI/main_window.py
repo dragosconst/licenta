@@ -22,7 +22,12 @@ MW_W = 1000
 MW_H = 630
 FS = 60
 CR_PROCESS = "cr_proc"
+CR_PROC_DIM = "cr_proc_dim"
 CR_PROC_TEXT = "cr_proc_text"
+CR_PROC_WH = "cr_proc_dimwh"
+CR_PROC_HH = "cr_proc_dimhh"
+CR_PROC_X = "cr_proc_posx"
+CR_PROC_Y = "cr_proc_posy"
 CAM_W_IMG = "cam_img"
 CAM_C_IMG = "cam_c_img"
 DIM_W = "dimw"
@@ -30,12 +35,14 @@ SC_WH = "dimwh"
 SC_HH = "dimhh"
 SC_STDW = 800
 SC_STDH = 600
+FRCNN_W = 1900
+FRCNN_H = 1080
 SC_X = "posx"
 SC_Y = "posy"
 SC_W = "screencw"
 SC_C = "screencap"
 SEL_W = "selectw"
-GAMES = ["Blackjack"]
+GAMES = ["Blackjack", "Poker Texas Hold'Em", "Razboi", "Macao", "Septica"]
 img_normalized = None
 video_capture = None
 UPDATE_CAMERA_RATE = 1000
@@ -172,14 +179,17 @@ def _get_screen_area():
 
 @torch.inference_mode()
 def get_selected_window_texture(model: torch.nn.Module):
-    global selected_window, img_normalized, last_camera_update, UPDATE_CAMERA_RATE, dets
+    global selected_window, img_normalized, last_camera_update, UPDATE_CAMERA_RATE, dets, CR_PROC_Y, CR_PROC_X, CR_PROC_HH, CR_PROC_WH
 
     if not dpg.does_item_exist(CR_PROC_TEXT):
         return
-    w = 1900
-    h = 1080
-    img = grab_selected_window_contents(selected_window, w, h)
+    w = dpg.get_value(CR_PROC_WH) if dpg.get_value(CR_PROC_WH) > 100 else 100
+    h = dpg.get_value(CR_PROC_HH) if dpg.get_value(CR_PROC_HH) > 100 else 100
+    x = dpg.get_value(CR_PROC_X)
+    y = dpg.get_value(CR_PROC_Y)
+    img = grab_selected_window_contents(selected_window, w, h, x, y)
     img = cv.cvtColor(img, cv.COLOR_RGB2RGBA)
+    img = np.asarray(Image.fromarray(img).resize((FRCNN_W, FRCNN_H)))
     img_tensor = torch.from_numpy(img[:, :, :3])
     img_tensor = img_tensor.permute(2, 0, 1)
     shape = img_tensor.size()[1:]
@@ -203,12 +213,12 @@ def get_selected_window_texture(model: torch.nn.Module):
     dpg.set_value(CR_PROC_TEXT, img_normalized)
 
 def _change_active_window(sender, app_data, user_data):
-    global CR_PROCESS, img_normalized, selected_window
+    global CR_PROCESS, img_normalized, selected_window, CR_PROC_DIM, FRCNN_H, FRCNN_W, CR_PROC_X, CR_PROC_Y, CR_PROC_HH, CR_PROC_WH
 
     if not dpg.does_item_exist(CR_PROCESS):
-        with dpg.window(tag=CR_PROCESS):
-            w = 1900
-            h = 1080
+        with dpg.window(tag=CR_PROCESS, width=FRCNN_W, height=FRCNN_H):
+            w = FRCNN_W
+            h = FRCNN_H
             selected_window = app_data
             img = grab_selected_window_contents(app_data, w, h)
             imc = img.copy()
@@ -222,6 +232,17 @@ def _change_active_window(sender, app_data, user_data):
                 dpg.add_raw_texture(w, h, img_normalized, tag=CR_PROC_TEXT)
             dpg.add_image(CR_PROC_TEXT)
         dpg.show_item(CR_PROCESS)
+    if not dpg.does_item_exist(CR_PROC_DIM):
+        with dpg.window(tag=CR_PROC_DIM):
+            w = FRCNN_W
+            h = FRCNN_H
+            x = 0
+            y = 0
+            dpg.add_slider_int(label="Width", tag=CR_PROC_WH, default_value=w, min_value=100, max_value=2000)
+            dpg.add_slider_int(label="Height", tag=CR_PROC_HH, default_value=h, min_value=100, max_value=2000)
+            dpg.add_slider_int(label="X pos", tag=CR_PROC_X, default_value=x, min_value=0, max_value=1900)
+            dpg.add_slider_int(label="Y pos", tag=CR_PROC_Y, default_value=y, min_value=0, max_value=1080)
+        dpg.show_item(CR_PROC_DIM)
 
 def create_main_window(font):
     with dpg.window(tag=MAIN_WINDOW):

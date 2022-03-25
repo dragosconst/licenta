@@ -31,7 +31,7 @@ from Data_Processing.detection_dataset import PlayingCardsFRCNNDataset
 from Utils.utils import intersection_over_union
 from Utils.eval import eval
 from references.engine import train_one_epoch, evaluate
-from Utils.utils import load_dataloader, get_loader
+from Utils.utils import load_dataloader, get_loader, load_negative_dataloader
 from Utils.trans import RandomAffineBoxSensitive, RandomPerspectiveBoxSensitive
 from Data_Processing.detection_processing_resnet import second_nms, filter_under_thresh
 from Image_Processing.detection_draw import draw_detection
@@ -48,7 +48,7 @@ def train_fccnn_reference(model: torch.nn.Module, optimizer: torch.optim.Optimiz
     for epoch in range(num_epochs):
         torch.cuda.empty_cache()
         train_one_epoch(model, optimizer, train_dataloader, device, epoch, print_freq=10, accumulate=16)
-        torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_e" + str(epoch +
+        torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_negative_e" + str(epoch +
                                                                             (0 if start_from is None else start_from)) +
             ".pt")
 
@@ -161,33 +161,34 @@ if __name__ == "__main__":
     targets = dataset.targets()
     indices = np.asarray([x for x in range(len(dataset))])
     indices = indices[..., np.newaxis]
-    train_idx, _, val_idx, _ = iterative_train_test_split(indices, np.asarray(targets), test_size=0.2)
+    # train_idx, _, val_idx, _ = iterative_train_test_split(indices, np.asarray(targets), test_size=0.2)
     # val_set, train_set = torch.utils.data.random_split(dataset, [int(len(dataset) * 1/5), int(len(dataset) * 4/5)])
-    # indices = torch.randperm(len(dataset)).tolist()
+    indices = torch.randperm(len(dataset)).tolist()
     random.seed(1)
     torch.manual_seed(1)
-    train_set = torch.utils.data.Subset(dataset, train_idx)
-    val_set = torch.utils.data.Subset(dataset_test, val_idx)
-    # train_set = torch.utils.data.Subset(dataset, indices[:100])
-    # val_set = torch.utils.data.Subset(dataset, indices[:100])
+    # train_set = torch.utils.data.Subset(dataset, train_idx)
+    # val_set = torch.utils.data.Subset(dataset_test, val_idx)
+    train_set = torch.utils.data.Subset(dataset, indices[:100])
+    val_set = torch.utils.data.Subset(dataset, indices[:100])
     # train_set.dataset.transforms = T.MyCompose((RandomAffineBoxSensitive(degrees=(0, 45), prob=0.4),
     #                                             RandomPerspectiveBoxSensitive(dist_scale=0.3, prob=0.2)))
 
     train_loader = get_loader(train_set, batch_size=3, shuffle=True)
     valid_loader = get_loader(val_set, batch_size=3, shuffle=False)
 
-    params = [p for p in frcnn.parameters() if p.requires_grad]
-    sgd = SGD(params, lr=0.001, momentum=0.9, weight_decay=0.0005)
-    adam = Adam(params, lr=1e-3)
-    # lr_sched = torch.optim.lr_scheduler.MultiStepLR(adam, [10, 20, 25], gamma=0.1)
-    lr_sched = torch.optim.lr_scheduler.StepLR(adam, step_size=4, gamma=0.1)
+    # sgd = SGD(params, lr=0.001, momentum=0.9, weight_decay=0.0005)
 
     # train_frcnn(frcnn, adam, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
     #             device="cuda", num_epochs=30)
 
-    frcnn.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_e1back.pt"))
+    frcnn.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class.pt"))
     # frcnn.eval()
     frcnn.to("cuda")
+    params = [p for p in frcnn.parameters() if p.requires_grad]
+    adam = Adam(params, lr=1e-3)
+    # lr_sched = torch.optim.lr_scheduler.MultiStepLR(adam, [10, 20, 25], gamma=0.1)
+    lr_sched = torch.optim.lr_scheduler.StepLR(adam, step_size=4, gamma=0.1)
+    train_set, train_loader = load_negative_dataloader(batch_size=2, shuffle=True)
     # validate(frcnn, valid_loader, "cuda")
 
     # torch.manual_seed(time.time())
@@ -208,8 +209,8 @@ if __name__ == "__main__":
     #         img_show.show()
 
     train_fccnn_reference(frcnn, adam, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
-                device="cuda", num_epochs=13, start_from=2)
+                device="cuda", num_epochs=5)
     #
-    torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class.pt")
+    torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_negative.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\mobilenet_v3_320_large.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_custom.pt")

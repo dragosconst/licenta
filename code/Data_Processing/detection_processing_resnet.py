@@ -48,7 +48,7 @@ def filter_under_thresh(detection: Dict[str, torch.Tensor]) -> None:
     labels = detection["labels"]
     # the boxes are already sorted according to scores
     for idx, score in enumerate(scores):
-        if score < 0.25:
+        if score < 0.75:
             bad_boxes.add(str(boxes[idx])) # use boxes coordinates because they are the only unique property of bounding boxes
 
     good_boxes = []

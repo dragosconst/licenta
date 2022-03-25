@@ -9,7 +9,7 @@ from ctypes import windll
 import numpy as np
 from PIL import Image
 
-def grab_selected_window_contents(wName, w=800, h=600) -> np.ndarray:
+def grab_selected_window_contents(wName, w: int=800, h: int=600, x: int=0, y: int=0) -> np.ndarray:
     hwnd = win32gui.FindWindow(None, wName)
     if not hwnd:
         raise Exception('Window not found: {}'.format(wName))
@@ -29,7 +29,6 @@ def grab_selected_window_contents(wName, w=800, h=600) -> np.ndarray:
     dataBitMap = win32ui.CreateBitmap()
     dataBitMap.CreateCompatibleBitmap(dcObj, w_wnd, h_wnd)
     cDC.SelectObject(dataBitMap)
-    # cDC.BitBlt((0, 0), (w, h), dcObj, (0, 0), win32con.SRCCOPY)
 
     result = windll.user32.PrintWindow(hwnd, cDC.GetSafeHdc(), 2)
 
@@ -38,8 +37,9 @@ def grab_selected_window_contents(wName, w=800, h=600) -> np.ndarray:
     # dataBitMap.SaveBitmapFile(cDC, 'debug.bmp')
     signedIntsArray = dataBitMap.GetBitmapBits(True)
     img = Image.frombuffer('RGB', (dataInfo["bmWidth"], dataInfo["bmHeight"]), signedIntsArray, 'raw', 'BGRX', 0, 1)
-    img = img.resize((w, h))
+    # img = img.resize((w, h))
     img = np.asarray(img)
+    img = img[y:y+h, x:x+w, :]
     # img = img.reshape((h, w, 3))
     # free resources
     dcObj.DeleteDC()

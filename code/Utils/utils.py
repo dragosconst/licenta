@@ -8,6 +8,8 @@ from torchvision.models.detection.rpn import AnchorGenerator
 from torchvision import transforms as T
 
 from Data_Processing.detection_dataset import PlayingCardsFRCNNDataset
+from Data_Processing.negative_dataset import NegativeExamples
+
 
 """
 Batches will be lists of (image, targets) tuples, this changes the whole batch into the tuple
@@ -19,6 +21,11 @@ def collate_fn(batch):
 
 def load_dataloader(batch_size: int = 16, shuffle: bool = True) -> Tuple[PlayingCardsFRCNNDataset, torch.utils.data.DataLoader]:
     dataset = PlayingCardsFRCNNDataset("D:\\facultate stuff\\licenta\\data\\my_stuff_augm\\")
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=shuffle)
+    return dataset, dataloader
+
+def load_negative_dataloader(batch_size: int=16, shuffle: bool=True) -> Tuple[NegativeExamples, torch.utils.data.DataLoader]:
+    dataset = NegativeExamples("../../data/negative_COCO2014/train2014/")
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=shuffle)
     return dataset, dataloader
 
