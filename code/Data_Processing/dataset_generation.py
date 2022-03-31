@@ -60,8 +60,8 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
         boxes = data["boxes"]
         for idx, box in enumerate(boxes):
             x1, y1, x2, y2 = box
-            data["boxes"][idx] = torch.as_tensor([x1+(PAD_SIZE-imw)//2,x2+(PAD_SIZE-imw)//2,
-                                                  y1+(PAD_SIZE-imh)//2, y2+(PAD_SIZE-imh)//2])
+            data["boxes"][idx] = torch.as_tensor([x1+(PAD_SIZE-imw)//2, y1+(PAD_SIZE-imh)//2,
+                                                  x2+(PAD_SIZE-imw)//2, y2+(PAD_SIZE-imh)//2])
         data["boxes"] = data["boxes"].float()
         padding = torch.from_numpy(padding)
         padding = padding.permute(2, 0, 1)
@@ -80,7 +80,11 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
             if x1 + x >= IM_WIDTH or y1 + y >= IM_HEIGHT or x2 + x - IM_WIDTH >= IM_WIDTH - x1 - x or \
                     y2 + y - IM_HEIGHT >= IM_HEIGHT - y1 - y:
                 continue
-            new_boxes.append(torch.as_tensor((x1 + x, y1 + y, x2 + x, y2 + y)).float())
+            x1 = max(x1 + x, 0)
+            y1 = max(y1 + y, 0)
+            x2 = min(x2 + x, IM_WIDTH - 1)
+            y2 = min(y2 + y, IM_HEIGHT - 1)
+            new_boxes.append(torch.as_tensor((x1, y1, x2, y2)).float())
             good_idx.append(idx)
         if len(new_boxes) > 0:
             data["boxes"] = torch.stack(new_boxes)
@@ -112,13 +116,12 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
             img_arr = np.asarray(img)
             box_on_mask = img_arr[y1:y2, x1:x2, 3]
             box_on_mask = box_on_mask[box_on_mask != 0]
-            if len(box_on_mask) / (x2 - x1) * (y2 - y1) > 0.3:
+            if len(box_on_mask) / ((x2 - x1) * (y2 - y1)) > 0.3:
                 bad_boxes.append(idx)
         bad_boxes = np.asarray(bad_boxes)
         for bad_box in bad_boxes[::-1]:
             final_targets["boxes"].pop(bad_box)
             final_targets["labels"].pop(bad_box)
-            bad_boxes -= 1
         final_targets["boxes"].extend(data["boxes"])
         final_targets["labels"].extend(data["labels"])
     # bg_image.show()
