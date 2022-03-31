@@ -11,7 +11,7 @@ from PIL import Image
 from Windows_utils.windows import grab_all_open_windows, grab_selected_window_contents, grab_screen_area
 from Image_Processing.line_detection import get_lines_in_image
 from Image_Processing.detection_draw import draw_detection
-from Data_Processing.detection_processing_resnet import second_nms, filter_under_thresh
+from Data_Processing.detection_processing_resnet import second_nms, filter_under_thresh, filter_detections_by_game
 
 # window names and other constants
 MAIN_WINDOW = "Main"
@@ -43,6 +43,7 @@ SC_W = "screencw"
 SC_C = "screencap"
 SEL_W = "selectw"
 GAMES = ["Blackjack", "Poker Texas Hold'Em", "Razboi", "Macao", "Septica"]
+current_game = None
 img_normalized = None
 video_capture = None
 UPDATE_CAMERA_RATE = 1000
@@ -179,7 +180,8 @@ def _get_screen_area():
 
 @torch.inference_mode()
 def get_selected_window_texture(model: torch.nn.Module):
-    global selected_window, img_normalized, last_camera_update, UPDATE_CAMERA_RATE, dets, CR_PROC_Y, CR_PROC_X, CR_PROC_HH, CR_PROC_WH
+    global selected_window, img_normalized, last_camera_update, UPDATE_CAMERA_RATE, dets, CR_PROC_Y, CR_PROC_X, CR_PROC_HH, CR_PROC_WH,\
+    current_game
 
     if not dpg.does_item_exist(CR_PROC_TEXT):
         return
@@ -203,6 +205,7 @@ def get_selected_window_texture(model: torch.nn.Module):
         detections = model(img_tensor.unsqueeze(0))
         dets = detections[0]
         filter_under_thresh(dets)
+        filter_detections_by_game(current_game, dets)
         second_nms(dets)
 
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets)
@@ -244,6 +247,11 @@ def _change_active_window(sender, app_data, user_data):
             dpg.add_slider_int(label="Y pos", tag=CR_PROC_Y, default_value=y, min_value=0, max_value=1080)
         dpg.show_item(CR_PROC_DIM)
 
+def _change_game(sender, app_data, user_data):
+    global current_game
+
+    current_game = app_data
+
 def create_main_window(font):
     with dpg.window(tag=MAIN_WINDOW):
         dpg.add_button(label="Capture camera", width=MW_W, height=MW_H // 4, callback=_capture_camera)
@@ -253,7 +261,7 @@ def create_main_window(font):
         dpg.add_combo(label="Select window", tag=SEL_W, items=win_names, width=MW_W // 2,
                       callback=_change_active_window)
 
-        dpg.add_combo(label="Select game", items=GAMES)
+        dpg.add_combo(label="Select game", items=GAMES, callback=_change_game)
         dpg.add_button(label="Debug mode:ON", width=MW_W, height=MW_H // 4, tag="Debug", callback=_change_debug_text, user_data="Debug")
         dpg.bind_font(font)
 

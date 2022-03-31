@@ -197,3 +197,18 @@ class RandomColorJitterBoxSensitive():
 
         return image, target
 
+
+class RandomGaussianNoise():
+    def __init__(self, mean: float=0, var: float=1, prob: float=0.5):
+        self.mean = mean
+        self.var = var
+        self.prob = prob
+
+    def __call__(self, image, target):
+        if random.random() > self.prob:
+            return image, target
+        rgb_channels = image[:3, :, :].cpu()
+        rgb_channels = T.ConvertImageDtype(torch.float32)(rgb_channels)
+        rgb_channels = rgb_channels + torch.randn(rgb_channels.size()) * self.var + self.mean
+        image[:3, :, :] = T.ConvertImageDtype(image.dtype)(rgb_channels)
+        return image, target

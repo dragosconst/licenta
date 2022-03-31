@@ -13,8 +13,8 @@ import torchvision.transforms as transforms
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-from Utils.file_utils import get_image_files, get_random_bg_img, get_random_img, load_img_and_xml
-from Utils.trans import RandomAffineBoxSensitive, RandomPerspectiveBoxSensitive, MyCompose, RandomColorJitterBoxSensitive
+from Utils.file_utils import get_image_files, get_random_bg_img, get_random_img, load_img_and_xml, MAX_IM_SIZE
+from Utils.trans import RandomAffineBoxSensitive, RandomPerspectiveBoxSensitive, MyCompose, RandomColorJitterBoxSensitive, RandomGaussianNoise
 from Data_Processing.Raw_Train_Data.raw import parse_xml, possible_classes, pos_cls_inverse
 """
 Generate a dataset of a certain size from a given dataset of cropped cards and another dataset of random backgrounds.
@@ -23,6 +23,8 @@ Generate a dataset of a certain size from a given dataset of cropped cards and a
 
 IM_HEIGHT = 1080
 IM_WIDTH = 1900
+SQ_2 = 1.414
+
 def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, Dict[str, torch.Tensor]]:
     """
     Generate a random image with given cards and bg_image. Note that the cards should ALREADY be resized prior to calling
@@ -36,39 +38,64 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
 
     card_masks = []
     transforms = MyCompose(
-       (RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
-        RandomAffineBoxSensitive(degrees=(0, 350), scale=1., prob=0.6),
+       (RandomGaussianNoise(mean=0., var=0.05, prob=1.),
+        RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
+        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.5, 1.5), prob=0.6),
         RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3))
     )
     # create the card masks, they will be a couple of black images with cards on them after various transforms
     for (img, data) in cards:
         img_full = np.zeros((IM_HEIGHT, IM_WIDTH, 4), dtype=np.uint8)
+
+        PAD_SIZE = int(MAX_IM_SIZE * SQ_2 * 1.5)
+        # use a padding array to avoid applying the transforms on the whole image
+        padding = np.zeros((PAD_SIZE, PAD_SIZE, 4), dtype=np.uint8)
         imw, imh = img.size
-        x = torch.randint(low=20, high=IM_WIDTH - imw//2, size=(1,)).item()
-        y = torch.randint(low=20, high=IM_HEIGHT - imh//2, size=(1,)).item()
+        img = np.asarray(img, dtype=np.uint8)
+        padding[(PAD_SIZE-imh)//2:(PAD_SIZE-imh)//2+imh,
+        (PAD_SIZE-imw)//2:(PAD_SIZE-imw)//2+imw, :3] = img
+        for i, line in enumerate(padding[(PAD_SIZE-imh)//2:(PAD_SIZE-imh)//2+imh]):
+            for j, cell in enumerate(line[(PAD_SIZE-imw)//2:(PAD_SIZE-imw)//2+imw]):
+                padding[(PAD_SIZE-imh)//2+i, (PAD_SIZE-imw)//2+j, 3] = 255
         boxes = data["boxes"]
-        new_boxes = []
-        good_idx = []
         for idx, box in enumerate(boxes):
             x1, y1, x2, y2 = box
-            if x1 + x >= IM_WIDTH or y1 + y >= IM_HEIGHT or x2 + x >= IM_WIDTH or y2 + y >= IM_HEIGHT:
+            data["boxes"][idx] = torch.as_tensor([x1+(PAD_SIZE-imw)//2,x2+(PAD_SIZE-imw)//2,
+                                                  y1+(PAD_SIZE-imh)//2, y2+(PAD_SIZE-imh)//2])
+        data["boxes"] = data["boxes"].float()
+        padding = torch.from_numpy(padding)
+        padding = padding.permute(2, 0, 1)
+        padding, data = transforms(padding.to("cuda"), data) # apply transforms on cuda
+        padding = padding.cpu()
+        padding = padding.permute(1, 2, 0)
+
+
+        boxes = data["boxes"]   
+        new_boxes = []
+        good_idx = []
+        x = torch.randint(low=20, high=IM_WIDTH - PAD_SIZE//2, size=(1,)).item()
+        y = torch.randint(low=20, high=IM_HEIGHT - PAD_SIZE//2, size=(1,)).item()
+        for idx, box in enumerate(boxes):
+            x1, y1, x2, y2 = box
+            if x1 + x >= IM_WIDTH or y1 + y >= IM_HEIGHT or x2 + x - IM_WIDTH >= IM_WIDTH - x1 - x or \
+                    y2 + y - IM_HEIGHT >= IM_HEIGHT - y1 - y:
                 continue
             new_boxes.append(torch.as_tensor((x1 + x, y1 + y, x2 + x, y2 + y)).float())
             good_idx.append(idx)
-        data["boxes"] = torch.stack(new_boxes)
+        if len(new_boxes) > 0:
+            data["boxes"] = torch.stack(new_boxes)
+        else:
+            data["boxes"] = torch.as_tensor([])
         data["labels"] = data["labels"][good_idx]
-        x_crop = min(x + imw, IM_WIDTH) - x
-        y_crop = min(y + imh, IM_HEIGHT) - y
-        img = np.asarray(img, dtype=np.uint8)
-        img_full[y:y+imh, x:x+imw, :3] = img[:y_crop, :x_crop, :3]
-        for i, line in enumerate(img_full[y:y+imh]):
-            for j, cell in enumerate(line[x:x+imw]):
-                img_full[y+i, x+j, 3] = 255
+        x_crop = min(x + PAD_SIZE, IM_WIDTH) - x
+        y_crop = min(y + PAD_SIZE, IM_HEIGHT) - y
+        img_full[y:y+PAD_SIZE, x:x+PAD_SIZE, :] = padding[:y_crop, :x_crop, :]
+        img_full = Image.fromarray(img_full)
 
-        img_full = torch.tensor(img_full)
-        img_full = img_full.permute(2, 0, 1)
-        img_full, data = transforms(img_full, data)
-        img_full = T.ToPILImage()(img_full)
+        # img_full = torch.tensor(img_full)
+        # img_full = img_full.permute(2, 0, 1)
+        # img_full, data = transforms(img_full, data)
+        # img_full = T.ToPILImage()(img_full)
         card_masks.append((img_full, data))
 
     # resize background
@@ -85,11 +112,13 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
             img_arr = np.asarray(img)
             box_on_mask = img_arr[y1:y2, x1:x2, 3]
             box_on_mask = box_on_mask[box_on_mask != 0]
-            if len(box_on_mask) > 60:
+            if len(box_on_mask) / (x2 - x1) * (y2 - y1) > 0.3:
                 bad_boxes.append(idx)
+        bad_boxes = np.asarray(bad_boxes)
         for bad_box in bad_boxes[::-1]:
             final_targets["boxes"].pop(bad_box)
             final_targets["labels"].pop(bad_box)
+            bad_boxes -= 1
         final_targets["boxes"].extend(data["boxes"])
         final_targets["labels"].extend(data["labels"])
     # bg_image.show()
@@ -291,6 +320,6 @@ def resize_dataset(root_dir: str, dest_dir: str, res_factor: float) -> None:
 
 if __name__ == "__main__":
     # dataset_statistics("../../data/my_stuff_augm/")
-    resize_dataset("../../data/my_stuff_augm/", "../../data/my_stuff_augm/resized/", 0.6324553)
-    # gen_dataset_from_dir("../../data/RAW/my-stuff-cropped/", "../../data/my_stuff_augm/", num_datasets=2,
-    #                      prob_datasets=[0.7, 0.3], num_imgs=10, start_from=10500)
+    # resize_dataset("../../data/my_stuff_augm/", "../../data/my_stuff_augm/resized/", 0.6324553)
+    gen_dataset_from_dir("../../data/RAW/my-stuff-cropped/", "../../data/my_stuff_augm/testing/", num_datasets=2,
+                         prob_datasets=[0.7, 0.3], num_imgs=10, start_from=10500)
