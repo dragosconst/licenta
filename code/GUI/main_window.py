@@ -11,7 +11,7 @@ from PIL import Image
 from Windows_utils.windows import grab_all_open_windows, grab_selected_window_contents, grab_screen_area
 from Image_Processing.line_detection import get_lines_in_image
 from Image_Processing.detection_draw import draw_detection
-from Data_Processing.detection_processing_resnet import second_nms, filter_under_thresh, filter_detections_by_game
+from Data_Processing.detection_processing_resnet import second_nms, filter_under_thresh, filter_detections_by_game, filter_non_group_detections
 
 # window names and other constants
 MAIN_WINDOW = "Main"
@@ -207,6 +207,8 @@ def get_selected_window_texture(model: torch.nn.Module):
         filter_under_thresh(dets)
         filter_detections_by_game(current_game, dets)
         second_nms(dets)
+        filter_non_group_detections(current_game, dets)
+
 
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets)
     # img_pil = img_pil.resize(shape[::-1])

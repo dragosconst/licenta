@@ -323,6 +323,6 @@ def resize_dataset(root_dir: str, dest_dir: str, res_factor: float) -> None:
 
 if __name__ == "__main__":
     # dataset_statistics("../../data/my_stuff_augm/")
-    # resize_dataset("../../data/my_stuff_augm/", "../../data/my_stuff_augm/resized/", 0.6324553)
-    gen_dataset_from_dir("../../data/RAW/my-stuff-cropped/", "../../data/my_stuff_augm/testing/", num_datasets=2,
+    # resize_dataset("../../data/RAW/my-stuff-cropped/", "../../data/RAW/my-stuff-cropped-res/", 0.3)
+    gen_dataset_from_dir("../../data/RAW/my-stuff-cropped-res/", "../../data/my_stuff_augm/testing/", num_datasets=2,
                          prob_datasets=[0.7, 0.3], num_imgs=10, start_from=10500)
