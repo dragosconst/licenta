@@ -13,6 +13,7 @@ from Windows_utils.windows import grab_all_open_windows, grab_selected_window_co
 from Image_Processing.line_detection import get_lines_in_image
 from Image_Processing.detection_draw import draw_detection
 from Data_Processing.detection_processing_resnet import second_nms, filter_under_thresh, filter_detections_by_game, filter_non_group_detections
+from Data_Processing.group_filtering import get_player_hand
 
 # window names and other constants
 MAIN_WINDOW = "Main"
@@ -31,16 +32,6 @@ CR_PROC_X = "cr_proc_posx"
 CR_PROC_Y = "cr_proc_posy"
 CAM_W_IMG = "cam_img"
 CAM_C_IMG = "cam_c_img"
-PLAYER_HAND = "player_hand"
-pleft = "pleft"
-pright = "pright"
-ptop = "ptop"
-pbot = "pbot"
-CARDS_POT = "cards_pot"
-cleft = "cleft"
-cright = "cright"
-ctop = "ctop"
-cbot = "cbot"
 DIM_W = "dimw"
 SC_WH = "dimwh"
 SC_HH = "dimhh"
@@ -61,6 +52,8 @@ UPDATE_CAMERA_RATE = 1000
 last_camera_update = 0
 dets = []
 selected_window = None
+cards_pot = []
+player_hand = []
 
 def create_dpg_env():
     dpg.create_context()
@@ -191,20 +184,10 @@ def _get_screen_area():
         dpg.show_item(SC_W)
 
 
-def _get_player_cards_area() -> Tuple[int, ...]:
-    global pleft, pright, ptop, pbot
-
-    x1 = dpg.get_value(pleft)
-    y1 = dpg.get_value(ptop)
-    x2 = dpg.get_value(pright)
-    y2 = dpg.get_value(pbot)
-    return x1, y1, x2, y2
-
-
 @torch.inference_mode()
 def get_selected_window_texture(model: torch.nn.Module):
     global selected_window, img_normalized, last_camera_update, UPDATE_CAMERA_RATE, dets, CR_PROC_Y, CR_PROC_X, CR_PROC_HH, CR_PROC_WH,\
-    current_game
+    current_game, cards_pot, player_hand
 
     if not dpg.does_item_exist(CR_PROC_TEXT):
         return
@@ -231,17 +214,9 @@ def get_selected_window_texture(model: torch.nn.Module):
         filter_detections_by_game(current_game, dets)
         second_nms(dets)
         filter_non_group_detections(current_game, dets)
+        cards_pot, player_hand = get_player_hand(current_game, dets)
 
-    player_coords = _get_player_cards_area()
-    pw = (player_coords[2] - player_coords[0])
-    ph = (player_coords[3] - player_coords[1])
-    orange_mask = np.zeros((ph, pw, 4), dtype=np.uint8)
-    orange_mask[:, :, 3] = 128
-    orange_mask[:, :, 0] = 255
-    orange_mask[:, :, 1] = 165
-    orange_mask = Image.fromarray(orange_mask)
-    img_pil = draw_detection(T.ToPILImage()(img_tensor), dets)
-    img_pil.paste(orange_mask, (player_coords[0], player_coords[1]), orange_mask)
+    img_pil = draw_detection(T.ToPILImage()(img_tensor), dets, cards_pot, player_hand)
     # img_pil = img_pil.resize(shape[::-1])
     img[:, :, :3] = np.asarray(img_pil)
     # img = np.power(img, [1.2, 1.03, 1.0, 1.0])
@@ -278,18 +253,6 @@ def _change_active_window(sender, app_data, user_data):
             dpg.add_slider_int(label="X pos", tag=CR_PROC_X, default_value=x, min_value=0, max_value=1900)
             dpg.add_slider_int(label="Y pos", tag=CR_PROC_Y, default_value=y, min_value=0, max_value=1080)
         dpg.show_item(CR_PROC_DIM)
-    if not dpg.does_item_exist(PLAYER_HAND):
-        with dpg.window(tag=PLAYER_HAND, pos=(0, 500), label="Player sc area"):
-            dpg.add_slider_int(label="Left border", tag=pleft, default_value=0, min_value=100, max_value=1900)
-            dpg.add_slider_int(label="Top border", tag=ptop, default_value=500, min_value=100, max_value=1080)
-            dpg.add_slider_int(label="Right border", tag=pright, default_value=1900, min_value=0, max_value=1900)
-            dpg.add_slider_int(label="Bottom border", tag=pbot, default_value=1080, min_value=0, max_value=1080)
-    if not dpg.does_item_exist(CARDS_POT):
-        with dpg.window(tag=CARDS_POT, pos=(200, 0), label="Cards pot sc area"):
-            dpg.add_slider_int(label="Left border", tag=cleft, default_value=0, min_value=100, max_value=1900)
-            dpg.add_slider_int(label="Top border", tag=ctop, default_value=0, min_value=100, max_value=1080)
-            dpg.add_slider_int(label="Right border", tag=cright, default_value=1900, min_value=0, max_value=1900)
-            dpg.add_slider_int(label="Bottom border", tag=cbot, default_value=500, min_value=0, max_value=1080)
 
 
 def _change_game(sender, app_data, user_data):
