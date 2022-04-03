@@ -14,6 +14,7 @@ from Image_Processing.line_detection import get_lines_in_image
 from Image_Processing.detection_draw import draw_detection
 from Data_Processing.detection_processing_resnet import second_nms, filter_under_thresh, filter_detections_by_game, filter_non_group_detections
 from Data_Processing.group_filtering import get_player_hand
+from Data_Processing.extra_filters import filter_same_card
 
 # window names and other constants
 MAIN_WINDOW = "Main"
@@ -48,7 +49,7 @@ GAMES = ["Blackjack", "Poker Texas Hold'Em", "Razboi", "Macao", "Septica", "Soli
 current_game = None
 img_normalized = None
 video_capture = None
-UPDATE_CAMERA_RATE = 1000
+UPDATE_CAMERA_RATE = 500
 last_camera_update = 0
 dets = []
 selected_window = None
@@ -92,6 +93,7 @@ def update_camera(model: torch.nn.Module):
         img_tensor = img_tensor.to("cuda")
         detections = model(img_tensor.unsqueeze(0))
         dets = detections[0]
+        apply_inplace_filters(dets)
 
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets)
     img_pil = img_pil.resize(shape[::-1])
@@ -148,8 +150,7 @@ def update_screen_area(model: torch.nn.Module):
         img_tensor = img_tensor.to("cuda")
         detections = model(img_tensor.unsqueeze(0))
         dets = detections[0]
-        filter_under_thresh(dets)
-        second_nms(dets)
+        apply_inplace_filters(dets)
 
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets)
     img_pil = img_pil.resize(shape[::-1])
@@ -183,6 +184,13 @@ def _get_screen_area():
         dpg.show_item(DIM_W)
         dpg.show_item(SC_W)
 
+def apply_inplace_filters(dets) -> None:
+    global current_game
+
+    filter_under_thresh(dets)
+    filter_detections_by_game(current_game, dets)
+    second_nms(dets)
+    filter_non_group_detections(current_game, dets)
 
 @torch.inference_mode()
 def get_selected_window_texture(model: torch.nn.Module):
@@ -210,11 +218,9 @@ def get_selected_window_texture(model: torch.nn.Module):
         img_tensor = img_tensor.to("cuda")
         detections = model(img_tensor.unsqueeze(0))
         dets = detections[0]
-        filter_under_thresh(dets)
-        filter_detections_by_game(current_game, dets)
-        second_nms(dets)
-        filter_non_group_detections(current_game, dets)
+        apply_inplace_filters(dets)
         cards_pot, player_hand = get_player_hand(current_game, dets)
+        cards_pot, player_hand = filter_same_card(dets, cards_pot, player_hand)
 
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets, cards_pot, player_hand)
     # img_pil = img_pil.resize(shape[::-1])
