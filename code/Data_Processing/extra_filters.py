@@ -2,6 +2,7 @@ from typing import List, Tuple, Dict
 
 import torch
 
+from Data_Processing.group_filtering import new_indices
 
 def filter_same_card(detections: Dict[str, torch.Tensor], cards_pot: List[int], player_hand: List[int]) \
         -> Tuple[List[int], List[int]]:
@@ -29,4 +30,4 @@ def filter_same_card(detections: Dict[str, torch.Tensor], cards_pot: List[int], 
     detections["labels"] = labels[good_indices]
     detections["scores"] = scores[good_indices]
 
-    return new_pot, new_hand
+    return new_indices(new_pot, new_hand)

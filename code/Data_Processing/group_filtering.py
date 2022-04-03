@@ -45,7 +45,7 @@ def get_closest_groups(groups: Dict[int, int], detections: Dict[str, torch.Tenso
             cards_pot.append(key)
     return cards_pot, player_group
 
-def new_indices(cards_pot: List[int], player_hand: List[int]) -> Tuple[List[int], ...]:
+def new_indices(cards_pot: List[int], player_hand: List[int]) -> Tuple[List[int], List[int]]:
     """
     Get indices after filtering detections
     :param cards_pot: old cards pot indices

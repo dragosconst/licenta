@@ -15,6 +15,7 @@ from Image_Processing.detection_draw import draw_detection
 from Data_Processing.detection_processing_resnet import second_nms, filter_under_thresh, filter_detections_by_game, filter_non_group_detections
 from Data_Processing.group_filtering import get_player_hand
 from Data_Processing.extra_filters import filter_same_card
+from Data_Processing.frame_hand_detection import compare_detections
 
 # window names and other constants
 MAIN_WINDOW = "Main"
@@ -53,8 +54,16 @@ UPDATE_CAMERA_RATE = 500
 last_camera_update = 0
 dets = []
 selected_window = None
+
+same_ph_in_a_row = 0
+same_cp_in_a_row = 0
+last_player_hand = []
+last_card_pot = []
+DET_ROW_THRES = 15
 cards_pot = []
+cards_pot_labels = []
 player_hand = []
+player_hand_labels = []
 
 def create_dpg_env():
     dpg.create_context()
@@ -192,6 +201,24 @@ def apply_inplace_filters(dets) -> None:
     second_nms(dets)
     filter_non_group_detections(current_game, dets)
 
+def check_if_change_detections(dets) -> None:
+    global last_player_hand, last_card_pot, same_cp_in_a_row, same_ph_in_a_row, DET_ROW_THRES, cards_pot, \
+           player_hand, player_hand_labels, cards_pot_labels
+
+    fcp, fph, last_card_pot, last_player_hand = compare_detections(last_card_pot, last_player_hand, cards_pot,
+                                                                   player_hand, dets)
+    same_ph_in_a_row = 1 if fph < 0 else same_ph_in_a_row + 1
+    same_cp_in_a_row = 1 if fcp < 0 else same_cp_in_a_row + 1
+
+    if same_ph_in_a_row >= DET_ROW_THRES:
+        player_hand_labels = last_player_hand
+        if same_ph_in_a_row == DET_ROW_THRES:
+            print(f"I think hand is {player_hand_labels}")
+    if same_cp_in_a_row >= DET_ROW_THRES:
+        cards_pot_labels = last_card_pot
+        if same_cp_in_a_row == DET_ROW_THRES:
+            print(f"I think card pot is {cards_pot_labels}")
+
 @torch.inference_mode()
 def get_selected_window_texture(model: torch.nn.Module):
     global selected_window, img_normalized, last_camera_update, UPDATE_CAMERA_RATE, dets, CR_PROC_Y, CR_PROC_X, CR_PROC_HH, CR_PROC_WH,\
@@ -221,6 +248,8 @@ def get_selected_window_texture(model: torch.nn.Module):
         apply_inplace_filters(dets)
         cards_pot, player_hand = get_player_hand(current_game, dets)
         cards_pot, player_hand = filter_same_card(dets, cards_pot, player_hand)
+        check_if_change_detections(dets)
+
 
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets, cards_pot, player_hand)
     # img_pil = img_pil.resize(shape[::-1])
