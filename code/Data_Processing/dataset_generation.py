@@ -153,26 +153,46 @@ def choose_cut_on_prev(prev_cut: str) -> str:
     elif prev_cut == "d4":
         return random.choice(["v1", "h1"])
 
+def transform_coords(diag: str, a: float, x: int, side_len: int) -> float:
+    if diag == "d1":
+        return (x/side_len) / (2*(1-a)) - a/(2*(1-a))
+    elif diag == "d2":
+        return (x/side_len) / (2*(a-1)) + (a-2)/(2*(a-1))
+    elif diag == "d3":
+        return (x/side_len)/(2*a) + 1/2
+    elif diag == "d4":
+        return -(x/side_len)/(2*a) + 1/2
+
 def perform_cut(full_img, cut: str, bbox: List[int]):
-    x1, y1, x2, y2 = bbox
+    x1, y1, x2, y2 = np.asarray(bbox, dtype=np.int64)
     x3, y3, x4, y4 = x2, y1, x1, y2
     if cut == "v1" or cut == "v2":
         # v1 is cutting a portion of the left part of the bbox
         cut_fraction = np.random.uniform(0.2, 0.4)
-        xstart = int((cut == "v1") * 0 + (cut == "v2") * (x2 - cut_fraction * x2))
-        xstop = int((cut == "v1") * (cut_fraction * x2) + (cut == "v2") * x2)
-        full_img[y1:y2, xstart:xstop, 3] = 0 # remove masks
-    elif cut == "h1" or "h2":
-        cut_fraction = 0.1
-        ystart = int((cut == "v1") * 0 + (cut == "v2") * (y2 - cut_fraction * y2))
-        ystop = int((cut == "v1") * (cut_fraction * y2) + (cut == "v2") * y2)
-        full_img[ystart:ystop, x1:x2, 3] = 0 # remove masks
+        xstart = int((cut == "v1") * 0 + (cut == "v2") * (x2 - cut_fraction * (x2 - x1))) + x1
+        xstop = int((cut == "v1") * (cut_fraction * (x2 - x1)) + (cut == "v2") * (x2 - x1)) + x1
+        full_img[y1:y2, xstart:xstop, :3] = np.random.randint(0, 256) # remove masks
+    elif cut == "h1" or cut == "h2":
+        cut_fraction = 0.2
+        ystart = int((cut == "v1") * 0 + (cut == "v2") * (y2 - cut_fraction * (y2 - y1))) + y1
+        ystop = int((cut == "v1") * (cut_fraction * (y2 - y1)) + (cut == "v2") * (y2 - y1)) + y1
+        full_img[ystart:ystop, x1:x2, :3] = np.random.randint(0, 256) # remove masks
     else:
-        # diagonal cuts
-        a = np.random.uniform(0.15, 0.5) # coefficient for x axis
-        if cut == "d3" or cut == "d4":
+        # diagonal cuts, might be a huge bottleneck
+        a = np.random.uniform(0.25, 0.5) # coefficient for x axis
+        if cut == "d1" or cut == "d2":
             a = 1 - a
-
+        for y in range(y1, y2+1):
+            for x in range(x1, x2+1):
+                good_x = ((cut == "d1" or cut == "d2") and x >= a * (x2 - x1) + x1) or\
+                         ((cut == "d3" or cut == "d4") and x <= a * (x2 - x1) + x1)
+                if not good_x:
+                    continue
+                good_y = (int(transform_coords(cut, a, x-x1, x2 - x1) * (y2 - y1) + y1) >= y and (cut == "d1" or cut == "d4")) or\
+                         (int(transform_coords(cut, a, x-x1, x2 - x1) * (y2 - y1) + y1) <= y and (cut == "d2" or cut == "d3"))
+                if not good_y:
+                    continue
+                full_img[y, x, :3] = np.random.randint(0, 256) # remove masks
     return full_img
 
 def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, Dict[str, torch.Tensor]]:
@@ -251,16 +271,15 @@ def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image,
 
         card_masks.append((img_full, data))
 
-    # resize background
-    bg_image = bg_image.resize((IM_WIDTH, IM_HEIGHT))
-    bg_image = np.asarray(bg_image)
+    # apply cuts on bboxes
     for idx, (img, data) in enumerate(card_masks):
         boxes = data["boxes"]
+        img = np.asarray(img)
         for box in boxes:
             x1, y1, x2, y2 = box
             x3, y3, x4, y4 = x2, y1, x1, y2
             # choose how many cuts to apply to the label box
-            cuts_no = np.random.randint(low=0, high=3)
+            cuts_no = np.random.randint(low=1, high=3)
             cuts_types = [("v1", "v2"), ("h1", "h2"), ("d1", "d2", "d3", "d4")]
             prev_cut = None
             while cuts_no > 0:
@@ -272,8 +291,13 @@ def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image,
                     prev_cut = cut
                 else:
                     cut = choose_cut_on_prev(prev_cut)
-
+                img = perform_cut(img, cut, box)
                 cuts_no -= 1
+        img = Image.fromarray(img)
+        card_masks[idx] = (img, data)
+
+    # resize background
+    bg_image = bg_image.resize((IM_WIDTH, IM_HEIGHT))
 
     final_targets = {"boxes": [], "labels": []}
     # start stacking the photos - always check if a new image obscures the labels of an old one
