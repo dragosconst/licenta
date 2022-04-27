@@ -1,6 +1,7 @@
 from typing import List, Optional, Dict, Tuple
 import glob
 import os
+import random
 
 from PIL import Image
 import numpy as np
@@ -133,47 +134,51 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
         final_targets["labels"] = torch.Tensor([])
     return bg_image, final_targets
 
-def poly_inters(p1, p2) -> bool:
-    """
-    use separating line to find if polygons intersect
-    :param p1:
-    :param p2:
-    :return:
-    """
-    for poly in (p1, p2):
-        for id1, point in enumerate(poly):
-            id2 = (id1 + 1) % len(poly)
-            point1 = point
-            point2 = poly[id2]
 
-            normal = (point2[0].item()-point1[0].item(),point2[1].item()-point1[1].item())
+def choose_cut_on_prev(prev_cut: str) -> str:
+    if prev_cut == "v1":
+        return random.choices(["h1", "h2", "d3", "d4"], weights=[0.15, 0.15, 0.35, 0.35])[0]
+    elif prev_cut == "v2":
+        return random.choices(["h1", "h2", "d1", "d2"], weights=[0.15, 0.15, 0.35, 0.35])[0]
+    elif prev_cut == "h1":
+        return random.choice(["v1", "v2", "d4", "d1"])
+    elif prev_cut == "h2":
+        return random.choice(["v1", "v2", "d3", "d2"])
+    elif prev_cut == "d1":
+        return random.choice(["h1", "v2"])
+    elif prev_cut == "d2":
+        return random.choice(["v2", "h2"])
+    elif prev_cut == "d3":
+        return random.choice(["v1", "h2"])
+    elif prev_cut == "d4":
+        return random.choice(["v1", "h1"])
 
-            min1 = None
-            max1 = None
-            for point in p1:
-                projection = normal[0] * point[0].item() + normal[1] * point[1].item()
-                if min1 is None or projection < min1:
-                    min1 = projection
-                if max1 is None or projection > max1:
-                    max1 = projection
+def perform_cut(full_img, cut: str, bbox: List[int]):
+    x1, y1, x2, y2 = bbox
+    x3, y3, x4, y4 = x2, y1, x1, y2
+    if cut == "v1" or cut == "v2":
+        # v1 is cutting a portion of the left part of the bbox
+        cut_fraction = np.random.uniform(0.2, 0.4)
+        xstart = int((cut == "v1") * 0 + (cut == "v2") * (x2 - cut_fraction * x2))
+        xstop = int((cut == "v1") * (cut_fraction * x2) + (cut == "v2") * x2)
+        full_img[y1:y2, xstart:xstop, 3] = 0 # remove masks
+    elif cut == "h1" or "h2":
+        cut_fraction = 0.1
+        ystart = int((cut == "v1") * 0 + (cut == "v2") * (y2 - cut_fraction * y2))
+        ystop = int((cut == "v1") * (cut_fraction * y2) + (cut == "v2") * y2)
+        full_img[ystart:ystop, x1:x2, 3] = 0 # remove masks
+    else:
+        # diagonal cuts
+        a = np.random.uniform(0.15, 0.5) # coefficient for x axis
+        if cut == "d3" or cut == "d4":
+            a = 1 - a
 
-            min2, max2 = None, None
-            for point in p2:
-                projection = normal[0] * point[0].item() + normal[1] * point[1].item()
-                if min2 is None or projection < min2:
-                    min2 = projection
-                if max2 is None or projection > max2:
-                    max2 = projection
-
-            if max1 < min2 or max2 < min1:
-                return False
-    return True
+    return full_img
 
 def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, Dict[str, torch.Tensor]]:
     """
-    Generate a handlike image with given cards and bg_image. Handlike refers to the fact that the cards will somewhat
-    overlap each other's boxes, to get a better simulation of real environments. Note that the cards should ALREADY be
-    resized prior to calling this function.
+    Generate a random image with given cards and bg_image. Note that the cards should ALREADY be resized prior to calling
+    this function.
     :param cards: tuples of (img, data), where img is the pic of the card and data represents the relevant labeling data
     :param bg_image: a random background image
     :return: tuple of image and data dictionary with labels and bboxes
@@ -183,24 +188,17 @@ def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image,
 
     card_masks = []
     transforms = MyCompose(
-       (RandomGaussianNoise(mean=0., var=0.05, prob=1., debug=True),
-        RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7, debug=True),
-        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.5, 1.5), prob=0.6, debug=True),
-        RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3, debug=True))
+       (RandomGaussianNoise(mean=0., var=0.05, prob=1.),
+        RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
+        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.5, 1.5), prob=0.6),
+        RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3))
     )
     # create the card masks, they will be a couple of black images with cards on them after various transforms
-    # unobscured_cards: list of tuples representing the transformed bounding boxes of cards, used to check collisions
-    #                   against whole current card; by assumption, they are shrinked to 50% of their original area, by
-    #                   keeping the same ratio of sides as the original bbox (and the same center)
-    unobscured_cards = []
     for (img, data) in cards:
         img_full = np.zeros((IM_HEIGHT, IM_WIDTH, 4), dtype=np.uint8)
 
         PAD_SIZE = int(MAX_IM_SIZE * SQ_2 * 1.5)
         # use a padding array to avoid applying the transforms on the whole image
-        # the padding size should be chosen such that after applying any rotation, scale or perspective shift, the image
-        # should still be fully enclosed by the padding image, i.e. don't lose corners or other parts of the image after
-        # applying the transforms
         padding = np.zeros((PAD_SIZE, PAD_SIZE, 4), dtype=np.uint8)
         imw, imh = img.size
         img = np.asarray(img, dtype=np.uint8)
@@ -216,77 +214,29 @@ def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image,
             x1, y1, x2, y2 = box
             data["boxes"][idx] = torch.as_tensor([x1+(PAD_SIZE-imw)//2, y1+(PAD_SIZE-imh)//2,
                                                   x2+(PAD_SIZE-imw)//2, y2+(PAD_SIZE-imh)//2])
-        x1, y1, x2, y2 = (PAD_SIZE-imw)//2, (PAD_SIZE-imh)//2, (PAD_SIZE-imw)//2+imw, (PAD_SIZE-imh)//2+imh
-        data["boxes"]= torch.cat((data["boxes"], torch.as_tensor([(x1, y1, x2, y2)]))) # append whole card as a box
-        data["labels"] = torch.cat((data["labels"], torch.as_tensor([[-1]])))  # append whole card as a box
         data["boxes"] = data["boxes"].float()
         padding = torch.from_numpy(padding)
         padding = padding.permute(2, 0, 1)
-        padding, data, debug = transforms(padding.to("cuda"), data) # apply transforms on cuda
-        whole_card_bbox = data["boxes"][-1]
-        whole_card = debug[-1]
+        padding, data = transforms(padding.to("cuda"), data) # apply transforms on cuda
         padding = padding.cpu()
         padding = padding.permute(1, 2, 0)
+
 
         boxes = data["boxes"]
         new_boxes = []
         good_idx = []
-
-        if len(unobscured_cards) == 0:
-            x = torch.randint(low=20, high=IM_WIDTH - PAD_SIZE//2, size=(1,)).item()
-            y = torch.randint(low=20, high=IM_HEIGHT - PAD_SIZE//2, size=(1,)).item()
-        else:
-            # choose random coordinates such as they are guaranteed to obscure at least one bounding box in such
-            # a way that it still should be recognizable
-            cs = []
-            wx1, wy1, wx2, wy2 = whole_card_bbox
-            wx = (wx2 - wx1)
-            wy = (wy2 - wy1)
-            for card in unobscured_cards:
-                x1, y1, x2, y2 = card
-                cs.append([(max(x1-wx,20+wx1), max(y1-wy,20+wy1)), (min(x2+wx,IM_WIDTH - PAD_SIZE//2+wx1), min(y2+wy,\
-                                                            IM_HEIGHT - PAD_SIZE//2+wy1))])
-            ci_index = np.random.choice(len(cs))
-            ci = cs[ci_index]
-            not_intersecting = True
-            x1, y1, x2, y2 = unobscured_cards[ci_index]
-            card_poly = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
-            while not_intersecting:
-                x = torch.randint(low=ci[0][0].long().item(), high=ci[1][0].long().item(), size=(1,)).item() - wx1.long().item()
-                y = torch.randint(low=ci[0][1].long().item(), high=ci[1][1].long().item(), size=(1,)).item() - wy1.long().item()
-                if poly_inters(card_poly, whole_card):
-                    not_intersecting = False
-
-
-            # remove cards obscured by current card by checking if any of their points reside in the current card's
-            # bounding box
-            for card in unobscured_cards:
-                x1, y1, x2, y2 = card
-                x3, y3, x4, y4 = x2, y1, x2, y1
-                p1 = x1 >= wx1 + x and x1 <= wx2 + x and y1 >= wy1 + y and y1 <= wy2 + y
-                p2 = x2 >= wx1 + x and x2 <= wx2 + x and y2 >= wy1 + y and y2 <= wy2 + y
-                p3 = x3 >= wx1 + x and x3 <= wx2 + x and y3 >= wy1 + y and y3 <= wy2 + y
-                p4 = x4 >= wx1 + x and x4 <= wx2 + x and y4 >= wy1 + y and y4 <= wy2 + y
-                if p1 or p2 or p3 or p4:
-                    unobscured_cards.remove(card)
-
+        x = torch.randint(low=20, high=IM_WIDTH - PAD_SIZE//2, size=(1,)).item()
+        y = torch.randint(low=20, high=IM_HEIGHT - PAD_SIZE//2, size=(1,)).item()
         for idx, box in enumerate(boxes):
             x1, y1, x2, y2 = box
-            if x1 + x >= IM_WIDTH or y1 + y >= IM_HEIGHT or x2 + x - IM_WIDTH >= IM_WIDTH - x1 - x or \
-                    y2 + y - IM_HEIGHT >= IM_HEIGHT - y1 - y:
+            if x1 + x >= IM_WIDTH or y1 + y >= IM_HEIGHT or x2 + x - IM_WIDTH >= IM_WIDTH - x1 - 1/2 *x or \
+                    y2 + y - IM_HEIGHT >= IM_HEIGHT - y1 - 1/2 * y:
                 continue
             x1 = max(x1 + x, 0)
             y1 = max(y1 + y, 0)
             x2 = min(x2 + x, IM_WIDTH - 1)
             y2 = min(y2 + y, IM_HEIGHT - 1)
             new_boxes.append(torch.as_tensor((x1, y1, x2, y2)).float())
-            w = (x2 - x1)
-            h = (y2 - y1)
-            # scale area to 50% of original area, but also keep the center and sides ratio
-            scale_factor = 1/SQ_2
-            nw, nh = w * scale_factor, h* scale_factor
-            unobscured_cards.append((x1*scale_factor + w//2 - nw//2, y1*scale_factor + h//2 - nh//2,
-                                     x2*scale_factor + w//2 - nw//2, y2*scale_factor + h//2 - nh//2))
             good_idx.append(idx)
         if len(new_boxes) > 0:
             data["boxes"] = torch.stack(new_boxes)
@@ -303,6 +253,27 @@ def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image,
 
     # resize background
     bg_image = bg_image.resize((IM_WIDTH, IM_HEIGHT))
+    bg_image = np.asarray(bg_image)
+    for idx, (img, data) in enumerate(card_masks):
+        boxes = data["boxes"]
+        for box in boxes:
+            x1, y1, x2, y2 = box
+            x3, y3, x4, y4 = x2, y1, x1, y2
+            # choose how many cuts to apply to the label box
+            cuts_no = np.random.randint(low=0, high=3)
+            cuts_types = [("v1", "v2"), ("h1", "h2"), ("d1", "d2", "d3", "d4")]
+            prev_cut = None
+            while cuts_no > 0:
+                cut = cuts_types[np.random.choice(len(cuts_types))]
+                cuts_types.remove(cut)
+                if prev_cut is None:
+                    # for the first cut, just choose it randomly
+                    cut = cut[np.random.choice(len(cut))]
+                    prev_cut = cut
+                else:
+                    cut = choose_cut_on_prev(prev_cut)
+
+                cuts_no -= 1
 
     final_targets = {"boxes": [], "labels": []}
     # start stacking the photos - always check if a new image obscures the labels of an old one
@@ -315,7 +286,7 @@ def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image,
             img_arr = np.asarray(img)
             box_on_mask = img_arr[y1:y2, x1:x2, 3]
             box_on_mask = box_on_mask[box_on_mask != 0]
-            if len(box_on_mask) / ((x2 - x1) * (y2 - y1)) > 0.7:
+            if len(box_on_mask) / ((x2 - x1) * (y2 - y1)) > 0.3:
                 bad_boxes.append(idx)
         bad_boxes = np.asarray(bad_boxes)
         # remove obscured boxes from the scene
