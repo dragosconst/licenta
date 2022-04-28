@@ -20,7 +20,8 @@ def collate_fn(batch):
     return tuple(zip(*batch))
 
 def load_dataloader(batch_size: int = 16, shuffle: bool = True) -> Tuple[PlayingCardsFRCNNDataset, torch.utils.data.DataLoader]:
-    dataset = PlayingCardsFRCNNDataset("D:\\facultate stuff\\licenta\\data\\my_stuff_augm\\")
+    # dataset = PlayingCardsFRCNNDataset("D:\\facultate stuff\\licenta\\data\\my_stuff_augm\\testing\\")
+    dataset = PlayingCardsFRCNNDataset("/mnt/d/facultate stuff/licenta/data/my_stuff_augm/testing")
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=shuffle)
     return dataset, dataloader
 
@@ -29,8 +30,8 @@ def load_negative_dataloader(batch_size: int=16, shuffle: bool=True) -> Tuple[Ne
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=shuffle)
     return dataset, dataloader
 
-def get_loader(dataset: torch.utils.data.Dataset, batch_size: int = 16, shuffle: bool = True):
-    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=shuffle)
+def get_loader(dataset: torch.utils.data.Dataset, batch_size: int = 16, shuffle: bool = True, num_workers: int=0):
+    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=shuffle, num_workers=num_workers)
 
 def intersection_over_union(bbox_a, bbox_b):
     x_a = max(bbox_a[0], bbox_b[0])

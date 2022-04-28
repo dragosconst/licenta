@@ -169,13 +169,13 @@ def perform_cut(full_img, cut: str, bbox: List[int]):
     if cut == "v1" or cut == "v2":
         # v1 is cutting a portion of the left part of the bbox
         cut_fraction = np.random.uniform(0.2, 0.4)
-        xstart = int((cut == "v1") * 0 + (cut == "v2") * (x2 - cut_fraction * (x2 - x1))) + x1
+        xstart = int((cut == "v1") * 0 + (cut == "v2") * ((x2 - x1) - cut_fraction * (x2 - x1))) + x1
         xstop = int((cut == "v1") * (cut_fraction * (x2 - x1)) + (cut == "v2") * (x2 - x1)) + x1
         full_img[y1:y2, xstart:xstop, :3] = np.random.randint(0, 256) # remove masks
     elif cut == "h1" or cut == "h2":
         cut_fraction = 0.2
-        ystart = int((cut == "v1") * 0 + (cut == "v2") * (y2 - cut_fraction * (y2 - y1))) + y1
-        ystop = int((cut == "v1") * (cut_fraction * (y2 - y1)) + (cut == "v2") * (y2 - y1)) + y1
+        ystart = int((cut == "h1") * 0 + (cut == "h2") * ((y2 - y1) - cut_fraction * (y2 - y1))) + y1
+        ystop = int((cut == "h1") * (cut_fraction * (y2 - y1)) + (cut == "h2") * (y2 - y1)) + y1
         full_img[ystart:ystop, x1:x2, :3] = np.random.randint(0, 256) # remove masks
     else:
         # diagonal cuts, might be a huge bottleneck
@@ -208,7 +208,7 @@ def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image,
 
     card_masks = []
     transforms = MyCompose(
-       (RandomGaussianNoise(mean=0., var=0.05, prob=1.),
+       (#RandomGaussianNoise(mean=0., var=0.05, prob=1.),
         RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
         RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.5, 1.5), prob=0.6),
         RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3))
@@ -223,7 +223,7 @@ def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image,
         imw, imh = img.size
         img = np.asarray(img, dtype=np.uint8)
         padding[(PAD_SIZE-imh)//2:(PAD_SIZE-imh)//2+imh,
-        (PAD_SIZE-imw)//2:(PAD_SIZE-imw)//2+imw, :3] = img
+        (PAD_SIZE-imw)//2:(PAD_SIZE-imw)//2+imw, :3] = img[:, :, :3]
         # create image mask
         for i, line in enumerate(padding[(PAD_SIZE-imh)//2:(PAD_SIZE-imh)//2+imh]):
             for j, cell in enumerate(line[(PAD_SIZE-imw)//2:(PAD_SIZE-imw)//2+imw]):
@@ -249,8 +249,8 @@ def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image,
         y = torch.randint(low=20, high=IM_HEIGHT - PAD_SIZE//2, size=(1,)).item()
         for idx, box in enumerate(boxes):
             x1, y1, x2, y2 = box
-            if x1 + x >= IM_WIDTH or y1 + y >= IM_HEIGHT or x2 + x - IM_WIDTH >= IM_WIDTH - x1 - 1/2 *x or \
-                    y2 + y - IM_HEIGHT >= IM_HEIGHT - y1 - 1/2 * y:
+            if x1 + x >= IM_WIDTH or y1 + y >= IM_HEIGHT or x2 + x - IM_WIDTH >= 1/2 * (IM_WIDTH - (x1 + x)) or \
+                    y2 + y - IM_HEIGHT >= 1/2*(IM_HEIGHT - (y1 + y)):
                 continue
             x1 = max(x1 + x, 0)
             y1 = max(y1 + y, 0)
@@ -509,7 +509,6 @@ def gen_dataset_handlike_from_dir(root_dir: str, dest_dir: str, num_datasets: in
             if card == possible_classes["JOKER_red"] and not os.path.exists(os.path.join(root_dir, "joker_red" + dataset
                                                                                          + ".jpg")):
                 card = possible_classes["JOKER_black"]
-
             img, targets = load_img_and_xml(root_dir, pos_cls_inverse[card].lower() + dataset)
             cards.append((img, targets))
 
@@ -540,7 +539,7 @@ def dataset_statistics(dataset_path: str) -> None:
     files = glob.glob(os.path.join(dataset_path, "*.xml"))
     final_results = {}
 
-    for file in tqdm(files[9000:]):
+    for file in tqdm(files):
         xml_stuff = parse_xml(file)
         for cls, *box in xml_stuff:
             if cls in final_results:
@@ -553,16 +552,12 @@ def dataset_statistics(dataset_path: str) -> None:
         print(f"Class {cls} has {final_results[cls]} examples.")
     sum = 0
     for cls in final_results:
-        if cls=="JOKER_red":
-            continue
         sum += final_results[cls]
-    mean = sum / (len(final_results)-1)
+    mean = sum / (len(final_results))
     sum = 0
     for cls in final_results:
-        if cls=="JOKER_red":
-            continue
         sum += (final_results[cls] - mean) ** 2
-    variance = sum / (len(final_results)-1)
+    variance = sum / (len(final_results))
     print(f"Mean of dataset is {mean}.")
     print(f"Variance of dataset is {variance}.")
 
@@ -597,7 +592,7 @@ def resize_dataset(root_dir: str, dest_dir: str, res_factor: float) -> None:
         write_annotation(dest_dir, str(i), img.size[::-1], data_dict)
 
 if __name__ == "__main__":
-    # dataset_statistics("../../data/my_stuff_augm/")
+    dataset_statistics("../../data/my_stuff_augm/testing/")
     # resize_dataset("../../data/RAW/my-stuff-cropped/", "../../data/RAW/my-stuff-cropped-res/", 0.3)
-    gen_dataset_handlike_from_dir("../../data/RAW/my-stuff-cropped-res/", "../../data/my_stuff_augm/testing/", num_datasets=2,
-                         prob_datasets=[0.7, 0.3], num_imgs=10, start_from=1)
+    # gen_dataset_handlike_from_dir("../../data/RAW/PNG-cards-1.3/PNG-cards-1.3/", "../../data/my_stuff_augm/testing/", num_datasets=1,
+    #                      prob_datasets=[1.], num_imgs=2* 10 ** 4, start_from=5 * 10 **4)

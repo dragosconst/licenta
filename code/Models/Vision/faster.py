@@ -2,6 +2,7 @@ from typing import List, Optional, Dict, Tuple
 from tqdm import tqdm
 import math
 import sys
+# sys.path.append("D:\facultate stuff\licenta\code")
 import time
 import copy
 import random
@@ -41,6 +42,7 @@ def train_fccnn_reference(model: torch.nn.Module, optimizer: torch.optim.Optimiz
                           valid_dataloader: torch.utils.data.DataLoader,
                           lr_scheduler: torch.optim.lr_scheduler.MultiStepLR, device: str, num_epochs: int= 30,
                           start_from: int=None) -> None:
+    # gradient clipping
     for p in model.parameters():
         if p.requires_grad:
             p.register_hook(lambda grad: torch.clamp(grad, -1, 1))
@@ -48,7 +50,10 @@ def train_fccnn_reference(model: torch.nn.Module, optimizer: torch.optim.Optimiz
     for epoch in range(num_epochs):
         torch.cuda.empty_cache()
         train_one_epoch(model, optimizer, train_dataloader, device, epoch, print_freq=10, accumulate=16)
-        torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_negative_e" + str(epoch +
+        # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_slices_e" + str(epoch +
+        #                                                                     (0 if start_from is None else start_from)) +
+        #     ".pt")
+        torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_slices_e" + str(epoch +
                                                                             (0 if start_from is None else start_from)) +
             ".pt")
 
@@ -161,56 +166,40 @@ if __name__ == "__main__":
     targets = dataset.targets()
     indices = np.asarray([x for x in range(len(dataset))])
     indices = indices[..., np.newaxis]
-    # train_idx, _, val_idx, _ = iterative_train_test_split(indices, np.asarray(targets), test_size=0.2)
-    # val_set, train_set = torch.utils.data.random_split(dataset, [int(len(dataset) * 1/5), int(len(dataset) * 4/5)])
-    indices = torch.randperm(len(dataset)).tolist()
+    train_idx, _, val_idx, _ = iterative_train_test_split(indices, np.asarray(targets), test_size=0.2)
+    # indices = torch.randperm(len(dataset)).tolist()
     random.seed(1)
     torch.manual_seed(1)
-    # train_set = torch.utils.data.Subset(dataset, train_idx)
-    # val_set = torch.utils.data.Subset(dataset_test, val_idx)
-    train_set = torch.utils.data.Subset(dataset, indices[:100])
-    val_set = torch.utils.data.Subset(dataset, indices[:100])
+    train_set = torch.utils.data.Subset(dataset, train_idx)
+    val_set = torch.utils.data.Subset(dataset_test, val_idx)
+    # train_set = torch.utils.data.Subset(dataset, indices)
+    # val_set = torch.utils.data.Subset(dataset, indices)
     # train_set.dataset.transforms = T.MyCompose((RandomAffineBoxSensitive(degrees=(0, 45), prob=0.4),
     #                                             RandomPerspectiveBoxSensitive(dist_scale=0.3, prob=0.2)))
 
-    train_loader = get_loader(train_set, batch_size=3, shuffle=True)
-    valid_loader = get_loader(val_set, batch_size=3, shuffle=False)
+    train_loader = get_loader(train_set, batch_size=3, shuffle=True, num_workers=8)
+    valid_loader = get_loader(val_set, batch_size=3, shuffle=False, num_workers=8)
 
     # sgd = SGD(params, lr=0.001, momentum=0.9, weight_decay=0.0005)
 
     # train_frcnn(frcnn, adam, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
     #             device="cuda", num_epochs=30)
 
-    frcnn.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class.pt"))
+    # frcnn.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class.pt"))
+    frcnn.load_state_dict(torch.load("/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class.pt"))
     # frcnn.eval()
+
     frcnn.to("cuda")
     params = [p for p in frcnn.parameters() if p.requires_grad]
     adam = Adam(params, lr=1e-3)
     # lr_sched = torch.optim.lr_scheduler.MultiStepLR(adam, [10, 20, 25], gamma=0.1)
     lr_sched = torch.optim.lr_scheduler.StepLR(adam, step_size=4, gamma=0.1)
-    train_set, train_loader = load_negative_dataloader(batch_size=2, shuffle=True)
+    # train_set, train_loader = load_negative_dataloader(batch_size=2, shuffle=True)
     # validate(frcnn, valid_loader, "cuda")
 
-    # torch.manual_seed(time.time())
-    # rand_img = torch.randint(high=10000,size=(1,)).item()
-    # print(rand_img)
-    # img, targets = dataset[rand_img]
-    # img = img.to("cuda")
-    # imgs = [img]
-    # with torch.inference_mode():
-    #     print("start pred")
-    #     pred = frcnn(imgs)
-    #     print("stop pred")
-    #     for idx, p in enumerate(pred):
-    #         filter_under_thresh(p)
-    #         second_nms(p)
-    #         print(p)
-    #         img_show = draw_detection(transforms.ToPILImage()(img.to("cpu")), p)
-    #         img_show.show()
-
     train_fccnn_reference(frcnn, adam, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
-                device="cuda", num_epochs=5)
-    #
-    torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_negative.pt")
+                device="cuda", num_epochs=7)
+    # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_slices.pt")
+    torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_slices.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\mobilenet_v3_320_large.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_custom.pt")

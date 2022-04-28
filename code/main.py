@@ -21,7 +21,7 @@ from Utils.utils import load_dataloader, get_loader
 def main():
     main_font = create_dpg_env()
     create_main_window(main_font)
-    frcnn = get_faster("../data/frcnn_resnet50_5k_per_class.pt")
+    frcnn = get_faster("../data/frcnn_resnet50_5k_per_class_slices.pt")
     frcnn.eval()
     while dpg.is_dearpygui_running():
         update_camera(frcnn)

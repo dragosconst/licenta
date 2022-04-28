@@ -252,8 +252,9 @@ def get_selected_window_texture(model: torch.nn.Module):
 
 
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets, cards_pot, player_hand)
+    img_pil = img_pil.resize((dpg.get_viewport_width(), dpg.get_viewport_height()))
     # img_pil = img_pil.resize(shape[::-1])
-    img[:, :, :3] = np.asarray(img_pil)
+    img[:dpg.get_viewport_height(), :dpg.get_viewport_width(), :3] = np.asarray(img_pil)
     # img = np.power(img, [1.2, 1.03, 1.0, 1.0])
     img = img.flatten().astype(np.float32)
     img_normalized = img / 255
