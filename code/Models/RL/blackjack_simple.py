@@ -14,6 +14,8 @@ import pandas as pd
 import warnings
 warnings.filterwarnings("ignore")
 
+from Models.RL.Envs.blackjack_splitting import BlackjackEnvSplit
+
 class MCAgent():
     def __init__(self, env, gamma=1.0,
                  start_epsilon=1.0, end_epsilon=0.05, epsilon_decay=0.99999):
@@ -174,49 +176,39 @@ if __name__ == "__main__":
         return result  # must return a list of tuples (state,action,reward,next_state,done)
 
     env = gym.make('Blackjack-v1')
+    env2 = BlackjackEnvSplit(natural=True)
 
     # MC eval
-    a = MCAgent(env)
-    # a.mc_control(n_episode=10 ** 6, first_visit=True)
-    # with open("D:\\facultate stuff\\licenta\\data\\bj_firsvisit.model", "wb") as f:
-    #     pickle.dump(a, f)
-    with open("D:\\facultate stuff\\licenta\\data\\bj_firstvisit.model", "rb") as f:
-        a = pickle.load(f)
+    a = MCAgent(env2)
+    a.mc_control(n_episode=5*10 ** 4, first_visit=True)
+    with open("D:\\facultate stuff\\licenta\\data\\bj_firsvisit_split.model", "wb") as f:
+        pickle.dump(a, f)
+    # with open("D:\\facultate stuff\\licenta\\data\\bj_firstvisit.model", "rb") as f:
+    #     a = pickle.load(f)
 
     #--------------------------------
     # draw moves table
     #--------------------------------
-    moves = np.zeros((28, 10))
-    for state, action in a.policy.items():
-        hand, dealer, ace = state
-        if not ace:
-            moves[hand-4][dealer-1] = action
-        else:
-            moves[hand-12+18][dealer-1] = action
-    print("----|A|2|3|4|5|6|7|8|9|10|---")
-    for idx, line in enumerate(moves):
-        if idx <= 17:
-            ph = idx + 4
-        else:
-            ph = "A," + str(idx-18).zfill(2)
-        print(f"{ph}:".zfill(4), end="")
-        for move in line:
-            print(f"{int(move)}|", end="")
-        print("---")
-
-    #--------------------------------
-    # heatmap of moves
-    #--------------------------------
-    xlabels = ["A", 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    ylabs = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, "A,A", "A,2",
-             "A,3", "A,4", "A,5", "A,6", "A,7", "A,8", "A,9", "A,10"]
-    sn.heatmap(moves, xticklabels=xlabels, yticklabels=ylabs,linewidths=0.1, linecolor='gray')
-    plt.savefig("firstvisit_moves.png")
-    plt.show()
+    # moves = np.zeros((28, 10))
+    # for state, action in a.policy.items():
+    #     hand, dealer, ace = state
+    #     if not ace:
+    #         moves[hand-4][dealer-1] = action
+    #     else:
+    #         moves[hand-12+18][dealer-1] = action
+    # #--------------------------------
+    # # heatmap of moves
+    # #--------------------------------
+    # xlabels = ["A", 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    # ylabs = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, "A,A", "A,2",
+    #          "A,3", "A,4", "A,5", "A,6", "A,7", "A,8", "A,9", "A,10"]
+    # sn.heatmap(moves, xticklabels=xlabels, yticklabels=ylabs,linewidths=0.1, linecolor='gray')
+    # plt.savefig("firstvisit_moves.png")
+    # plt.show()
     # print(moves)
 
     # a = TablePlayer()
-    samples = 10 ** 6
+    samples = 10 ** 5
     good = 0
     for epIndex in trange(samples):
         transitions = run_single_episode(env, a)
