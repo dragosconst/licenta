@@ -1,6 +1,7 @@
 # blackjack without card counting
 import random
 import warnings
+import copy
 warnings.filterwarnings("ignore")
 
 import gym
@@ -20,7 +21,8 @@ from Models.RL.Envs.blackjack_splitting import BlackjackEnvSplit
 def run_single_episode(env, agent, state=None):
     result = []
 
-    state = env.reset()
+    if state is None:
+        state = env.reset()
     done = False
     goodies = 0
     extra = 0
@@ -91,8 +93,6 @@ class MCAgent():
     # select action based on epsilon greedy (or  not)
     def select_action(self, state, epsilon):
         split, *_ = state
-        if epsilon is not None:
-            epsilon = self.get_epsilon_visit_based(state)
         if epsilon is not None and np.random.rand() < epsilon:
             action = self.env.action_space.sample()
             while split is None and action == 2:
@@ -107,19 +107,24 @@ class MCAgent():
         return action
 
     # run episode with current policy
-    def run_episode(self, eps=None, state=None, first_visit=True):
+    def run_episode(self, eps=None, env=None, first_visit=True):
         result = []
-        if state is None:
-            state = self.env.reset()
+        local_env = self.env
+        if env is None:
+            state = local_env.reset()
+        else:
+            local_env = env
+            state = local_env._get_obs()
+        ini_env = copy.deepcopy(local_env)
         done = False
         while not done:
             action = self.select_action(state, None)
-            output = self.env.step(action)
+            output = local_env.step(action)
             if len(output) == 2:
                 e1, e2 = output
-                r1 = self.run_episode(eps, state=e1._get_obs(), first_visit=first_visit)
+                r1, _ = self.run_episode(eps, e1, first_visit=first_visit)
                 self.mc_control_one_ep(r1, eps, first_visit)
-                r2 = self.run_episode(eps, state=e2._get_obs(), first_visit=first_visit)
+                r2, _ = self.run_episode(eps, e2, first_visit=first_visit)
                 self.mc_control_one_ep(r2, eps, first_visit)
                 done = True
                 result.append((state, action, r1[-1][2] + r2[-1][2], None, done))
@@ -127,14 +132,13 @@ class MCAgent():
             next_state, reward, done, info = output
             result.append((state, action, reward, next_state, done))
             state = next_state
-        return result
+        return result, ini_env
 
     # policy update with both e-greedy and regular argmax greedy
     def update_policy_q(self, eps=None):
         for state, values in self.q.items():
             split, *_ = state
             if eps is not None: # e-Greedy policy updates
-                eps = self.get_epsilon_visit_based(state)
                 if np.random.rand() < eps:
                     self.policy[state] = self.env.action_space.sample() # sample a random action
                     while split is None and self.policy[state] == 2:
@@ -145,6 +149,7 @@ class MCAgent():
                 self.policy[state] = np.argmax(values)
 
 
+    # used for splitting
     def mc_control_one_ep(self, transitions, eps, first_visit=True):
         states, actions, rewards, _, _ = zip(*transitions)
         # create table of first visit timesteps for first visit MC
@@ -173,6 +178,28 @@ class MCAgent():
 
         self.update_policy_q(eps)
 
+
+    # print rough estimation of current performance of agent
+    def print_value(self, epoch, print_freq, matches):
+        if epoch > 0 and epoch % print_freq == 0:
+            samples = matches
+            good = 0
+            extra = 0
+            for epIndex in range(samples):
+                transitions, add, extras = run_single_episode(self.env, self)
+                extra += extras
+                if add > 0:
+                    good += add
+                    continue
+                # print(transitions[-1])
+                if transitions[-1][2] >= 1:
+                    good += 1
+            print(f"Win rate so far is {(good / (samples + extra)) * 100}%, epoch {epoch}.")
+            with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_state_replay.model",
+                      "wb") as f:
+                pickle.dump(a, f)
+
+
     # mc control GLIE
     # using something similar to every-visit mc
     def mc_control(self, n_episode=10, first_visit=True):
@@ -181,51 +208,48 @@ class MCAgent():
             eps = self.get_epsilon(e)
 
             # Generate an episode following current policy
-            transitions = self.run_episode(eps=eps, first_visit=first_visit)
+            transitions, old_env = self.run_episode(eps=eps, first_visit=first_visit)
 
             states, actions, rewards, _, _ = zip(*transitions)
+            states_replay = 0
+            if states[0][0] is not None and (int(states[0][0]) != 10 or int(states[0][2]) != 10): # first state was a split? in which case, do a state replay 3-4 times
+                states_replay = 3
+            if states[0][-1] and (int(states[0][1]) != 21 or int(states[0][-1]) != 10):
+                states_replay = 3
 
-            # create table of first visit timesteps for first visit MC
-            if first_visit:
-                first_visit_dict = {}
-                for ts, s in enumerate(states):
-                    sa = (s, actions[ts])
-                    if sa not in first_visit_dict:
-                        first_visit_dict[sa] = ts
-
-            # Iterate over episode steps in reversed order, T-1, T-2, ....0
-            G = 0 # return output
-            for t in range(len(transitions)-1, -1, -1):
-                st = states[t]
-                at = actions[t]
-
-                G = self.gamma * G + rewards[t]
+            while states_replay >= 0:
+                # create table of first visit timesteps for first visit MC
                 if first_visit:
-                    if first_visit_dict[(st, at)] != t:
-                        continue
+                    first_visit_dict = {}
+                    for ts, s in enumerate(states):
+                        sa = (s, actions[ts])
+                        if sa not in first_visit_dict:
+                            first_visit_dict[sa] = ts
 
-                # this piece of code is great because it works for both every visit and first visit
-                self.action_visits[st][at] += 1
-                self.state_visits[st] += 1
-                self.q[st][at] = self.q[st][at] + (1 / self.action_visits[st][at]) * (G - self.q[st][at])
+                # Iterate over episode steps in reversed order, T-1, T-2, ....0
+                G = 0 # return output
+                for t in range(len(transitions)-1, -1, -1):
+                    st = states[t]
+                    at = actions[t]
 
-            self.update_policy_q(eps)
-            if e > 0 and e % (100 * 10 ** 3) == 0:
-                samples = 10 ** 5
-                good = 0
-                extra = 0
-                for epIndex in range(samples):
-                    transitions, add, extras = run_single_episode(self.env, self)
-                    extra += extras
-                    if add > 0:
-                        good += add
-                        continue
-                    # print(transitions[-1])
-                    if transitions[-1][2] >= 1:
-                        good += 1
-                print(f"Win rate so far is {(good/(samples+extra))*100}%, epoch {e}.")
-                with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_double_statevisitbased.model", "wb") as f:
-                    pickle.dump(a, f)
+                    G = self.gamma * G + rewards[t]
+                    if first_visit:
+                        if first_visit_dict[(st, at)] != t:
+                            continue
+
+                    # this piece of code is great because it works for both every visit and first visit
+                    self.action_visits[st][at] += 1
+                    self.state_visits[st] += 1
+                    self.q[st][at] = self.q[st][at] + (1 / self.action_visits[st][at]) * (G - self.q[st][at])
+
+                self.update_policy_q(eps)
+                if states_replay == 0:
+                    self.print_value(e, 100 * 10 ** 3, 10 ** 5)
+
+                states_replay -= 1
+                if states_replay > 0:
+                    transitions, old_env = self.run_episode(eps=eps, first_visit=first_visit, env=old_env)
+                    states, actions, rewards, _, _ = zip(*transitions)
 
 
 class TablePlayerNoSplit():
@@ -390,10 +414,10 @@ if __name__ == "__main__":
 
     # MC eval
     a = MCAgent(env2)
-    a.mc_control(n_episode=10 ** 6, first_visit=True)
-    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_double_statevisitbased.model", "wb") as f:
-        pickle.dump(a, f)
-    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_double_statevisitbased.model", "rb") as f:
+    # a.mc_control(n_episode=10 ** 6, first_visit=True)
+    # with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_state_replay.model", "wb") as f:
+    #     pickle.dump(a, f)
+    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_state_replay.model", "rb") as f:
         a = pickle.load(f)
 
     #--------------------------------
@@ -441,14 +465,14 @@ if __name__ == "__main__":
              "A,3", "A,4", "A,5", "A,6", "A,7", "A,8", "A,9", "A,10",
              "2,2", "3,3", "4,4", "5,5", "6,6", "7,7", "8,8", "9,9", "10,10", "A,A"]
     sn.heatmap(moves, xticklabels=xlabels, yticklabels=ylabs,linewidths=0.1, linecolor='gray')
-    plt.savefig("firstvisit_moves_doubles_actionvisits.png")
-    plt.show()
-    sn.heatmap(moves_visits, xticklabels=xlabels, yticklabels=ylabs,linewidths=0.1, linecolor='gray', cmap="YlGnBu")
-    plt.savefig("firstvisit_moves_doubles_actionvisits.png")
-    plt.show()
+    # plt.savefig("firstvisit_moves_state_replay.png")
+    # plt.show()
+    # sn.heatmap(moves_visits, xticklabels=xlabels, yticklabels=ylabs,linewidths=0.1, linecolor='gray', cmap="YlGnBu")
+    # plt.savefig("firstvisit_moves_state_replay_visits.png")
+    # plt.show()
     # print(moves)
 
-    # a = TablePlayerFull()
+    a = TablePlayerFull()
     samples = 5 * 10 ** 5
     extras = 0
     good = 0
