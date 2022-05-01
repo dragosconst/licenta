@@ -62,6 +62,7 @@ class MCAgent():
 
         # N(St, At)
         self.action_visits = defaultdict(lambda: np.zeros(self.n_action))  # number of actions by type performed in each state
+        self.state_visits = defaultdict(lambda: 0)
 
         # epsilon greedy parameters
         self.start_epsilon = start_epsilon
@@ -73,9 +74,9 @@ class MCAgent():
         epsilon = max(self.start_epsilon * (self.epsilon_decay ** (n_episode / 1.7)), self.end_epsilon)
         return epsilon
 
-    def get_epsilon_visit_based(self, state, action):
-        eps_decay = 0.9998
-        n = self.action_visits[state][action]
+    def get_epsilon_visit_based(self, state):
+        eps_decay = 0.999
+        n = self.state_visits[state]
         return max(self.start_epsilon * (eps_decay ** n), self.end_epsilon)
 
     def getAction(self, state):
@@ -90,6 +91,8 @@ class MCAgent():
     # select action based on epsilon greedy (or  not)
     def select_action(self, state, epsilon):
         split, *_ = state
+        if epsilon is not None:
+            epsilon = self.get_epsilon_visit_based(state)
         if epsilon is not None and np.random.rand() < epsilon:
             action = self.env.action_space.sample()
             while split is None and action == 2:
@@ -131,6 +134,7 @@ class MCAgent():
         for state, values in self.q.items():
             split, *_ = state
             if eps is not None: # e-Greedy policy updates
+                eps = self.get_epsilon_visit_based(state)
                 if np.random.rand() < eps:
                     self.policy[state] = self.env.action_space.sample() # sample a random action
                     while split is None and self.policy[state] == 2:
@@ -164,6 +168,7 @@ class MCAgent():
 
             # this piece of code is great because it works for both every visit and first visit
             self.action_visits[st][at] += 1
+            self.state_visits[st] += 1
             self.q[st][at] = self.q[st][at] + (1 / self.action_visits[st][at]) * (G - self.q[st][at])
 
         self.update_policy_q(eps)
@@ -201,6 +206,7 @@ class MCAgent():
 
                 # this piece of code is great because it works for both every visit and first visit
                 self.action_visits[st][at] += 1
+                self.state_visits[st] += 1
                 self.q[st][at] = self.q[st][at] + (1 / self.action_visits[st][at]) * (G - self.q[st][at])
 
             self.update_policy_q(eps)
@@ -218,7 +224,7 @@ class MCAgent():
                     if transitions[-1][2] >= 1:
                         good += 1
                 print(f"Win rate so far is {(good/(samples+extra))*100}%, epoch {e}.")
-                with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_double_exp.model", "wb") as f:
+                with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_double_statevisitbased.model", "wb") as f:
                     pickle.dump(a, f)
 
 
@@ -384,10 +390,10 @@ if __name__ == "__main__":
 
     # MC eval
     a = MCAgent(env2)
-    # a.mc_control(n_episode=10 ** 6, first_visit=True)
-    # with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_double_exp.model", "wb") as f:
-    #     pickle.dump(a, f)
-    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_double_exp.model", "rb") as f:
+    a.mc_control(n_episode=10 ** 6, first_visit=True)
+    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_double_statevisitbased.model", "wb") as f:
+        pickle.dump(a, f)
+    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_double_statevisitbased.model", "rb") as f:
         a = pickle.load(f)
 
     #--------------------------------
@@ -435,7 +441,7 @@ if __name__ == "__main__":
              "A,3", "A,4", "A,5", "A,6", "A,7", "A,8", "A,9", "A,10",
              "2,2", "3,3", "4,4", "5,5", "6,6", "7,7", "8,8", "9,9", "10,10", "A,A"]
     sn.heatmap(moves, xticklabels=xlabels, yticklabels=ylabs,linewidths=0.1, linecolor='gray')
-    plt.savefig("firstvisit_moves_doubles.png")
+    plt.savefig("firstvisit_moves_doubles_actionvisits.png")
     plt.show()
     sn.heatmap(moves_visits, xticklabels=xlabels, yticklabels=ylabs,linewidths=0.1, linecolor='gray', cmap="YlGnBu")
     plt.savefig("firstvisit_moves_doubles_actionvisits.png")
