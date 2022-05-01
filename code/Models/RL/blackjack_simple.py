@@ -31,12 +31,12 @@ def run_single_episode(env, agent, state=None):
         output = env.step(action)
         if len(output) == 2:
             e1, e2 = output
-            r1, add1, e = run_single_episode(env=env, agent=agent, state=e1._get_obs())
+            r1, add1, e = run_single_episode(env=e1, agent=agent, state=e1._get_obs())
             goodies += add1
             extra += e
             if r1[-1][2] >= 1:
                 goodies += 1
-            r2, add2, e = run_single_episode(env=env, agent=agent, state=e2._get_obs())
+            r2, add2, e = run_single_episode(env=e2, agent=agent, state=e2._get_obs())
             if r2[-1][2] >= 1:
                 goodies += 1
             goodies += add2
@@ -472,7 +472,7 @@ if __name__ == "__main__":
     # plt.show()
     # print(moves)
 
-    a = TablePlayerFull()
+    # a = TablePlayerFull()
     samples = 5 * 10 ** 5
     extras = 0
     good = 0
