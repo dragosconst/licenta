@@ -50,18 +50,20 @@ def splittable(hand): # Can we split?
 
 class BlackjackEnvSplit(BlackjackEnv):
     """
-    Similar to the parent blackjack env, but you can now split! This adds an extra dimension to the observation space
-    of size 2, which tells whether this hand can be split or not. Splitting will result in two hands at the same time, so we
-    will have to account for the difference in the observation space for this too.
+    Similar to the parent blackjack env, but you can now split!
     Splitting is action 2, and can be used an indefinite amount of times.
     Splitting results in spawning two new environments, and the reward of the split will be the cumulative reward given
     by the splits.
     The space will become of the form (15,32,11,2), where 15 represents the possible values for splitting: either None,
-    in which case splitting is not permitted, or the value of the identical card.
+    in which case splitting is not permitted, or the value of the identical card. The other dimensions are identical to
+    a regular Blackjack implementation.
+
+    I have also added the possibility of doubling, by using the action 3. In case of a doubling, if the player wins
+    the hand, they get double the reward, otherwise, they get double the negative reward.
     """
     def __init__(self, natural=False, sab=False):
         super().__init__(natural, sab)
-        self.action_space = spaces.Discrete(3)
+        self.action_space = spaces.Discrete(4)
 
         self.player = None # current playing hand
         self.dealer = None # current dealer hand
@@ -72,7 +74,7 @@ class BlackjackEnvSplit(BlackjackEnv):
             return None
         if self.player[0] != self.player[1]:
             return None
-        return self.player[0]
+        return 10 if self.player[0] in {'K', 'Q', 'J'} else int(self.player[0])
 
     def _get_obs(self):
         return (self.get_split_val(), sum_hand(self.player), 10 if self.dealer[0] in {"K", "Q", "J"}
@@ -118,11 +120,20 @@ class BlackjackEnvSplit(BlackjackEnv):
         elif action == 0: # stand
             done = True
             reward = 0
+        elif action == 3: # double
+            self.player.append(draw_card(self.np_random))
+            done = True
+            if is_bust(self.player):
+                reward = -2
+            else:
+                reward = 0
 
         # dealer's turn
         if done and reward >= 0:
             while sum_hand(self.dealer) < 17:
                 self.dealer.append(draw_card(self.np_random))
             reward = cmp(score(self.player), score(self.dealer))
+            if action == 3: # if player just doubled
+                reward *= 2
         return self._get_obs(), reward, done, {}
 
