@@ -97,7 +97,6 @@ class BlackjackEnvSplit(BlackjackEnv):
             done = False
             if is_bust(self.player):
                 reward = -1
-                # reached last hand
                 done = True
             else:
                 reward = 0

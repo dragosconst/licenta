@@ -1,4 +1,5 @@
 import time
+from typing import Tuple
 
 import win32gui, win32ui, win32con
 import ctypes
@@ -9,10 +10,12 @@ from ctypes import windll
 import numpy as np
 from PIL import Image
 
-def grab_selected_window_contents(wName, w: int=800, h: int=600, x: int=0, y: int=0) -> np.ndarray:
-    hwnd = win32gui.FindWindow(None, wName)
-    if not hwnd:
-        raise Exception('Window not found: {}'.format(wName))
+
+def grab_selected_window_contents(wName: str=None, hwnd=None, w: int=800, h: int=600, x: int=0, y: int=0) -> Tuple[np.ndarray, ...]:
+    if hwnd is None:
+        hwnd = win32gui.FindWindow(None, wName)
+        if not hwnd:
+            raise Exception('Window not found: {}'.format(wName))
 
     left, top, right, bot = win32gui.GetWindowRect(hwnd)
     w_wnd = right - left
@@ -47,7 +50,7 @@ def grab_selected_window_contents(wName, w: int=800, h: int=600, x: int=0, y: in
     win32gui.ReleaseDC(hdesk, wDC)
     win32gui.DeleteObject(dataBitMap.GetHandle())
 
-    return img
+    return img, hwnd
 
 
 def grab_screen_area(x, y, w, h):

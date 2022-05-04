@@ -4,12 +4,16 @@ import torch
 
 from Data_Processing.group_filtering import new_indices
 
+
 def filter_same_card(detections: Dict[str, torch.Tensor], cards_pot: List[int], player_hand: List[int]) \
         -> Tuple[List[int], List[int]]:
     """
     In-place filtering of detections of the same card. Assumption is we only play games that require one standard deck.
+
     :param detections: detections returned by model
-    :return: nothing, it is an in-place operation
+    :param cards_pot: cards pot indices
+    :param player_hand: player hand indices
+    :return: new indices for the card pot and player hand, in this order
     """
 
     boxes = detections["boxes"]

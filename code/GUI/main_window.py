@@ -18,6 +18,9 @@ from Data_Processing.extra_filters import filter_same_card
 from Data_Processing.frame_hand_detection import compare_detections
 
 # window names and other constants
+
+# windows (not the os) specific constants
+# ---------------------------------------
 MAIN_WINDOW = "Main"
 CAM_W = "cameraw"
 CAM_C = "cameracanny"
@@ -46,24 +49,31 @@ SC_Y = "posy"
 SC_W = "screencw"
 SC_C = "screencap"
 SEL_W = "selectw"
+
+# cards game specific constants
+# -----------------------------
 GAMES = ["Blackjack", "Poker Texas Hold'Em", "Razboi", "Macao", "Septica", "Solitaire"]
 current_game = None
+
+# image and net specific constants
+# --------------------------------
 img_normalized = None
 video_capture = None
-UPDATE_CAMERA_RATE = 500
+UPDATE_DETECTIONS_RATE = 500 # ms interval at which to update our detections, used to avoid slowing down the program too much
 last_camera_update = 0
 dets = []
-selected_window = None
-
+selected_window_title = None
+selected_window_hwnd = None
 same_ph_in_a_row = 0
 same_cp_in_a_row = 0
 last_player_hand = []
 last_card_pot = []
-DET_ROW_THRES = 15
+DET_ROW_THRES = 5
 cards_pot = []
 cards_pot_labels = []
 player_hand = []
 player_hand_labels = []
+
 
 def create_dpg_env():
     dpg.create_context()
@@ -74,6 +84,7 @@ def create_dpg_env():
     dpg.show_viewport()
     return default_font
 
+
 def _change_debug_text(sender, app_data, user_data):
     global DEBUG_STATE
     DEBUG_STATE = not DEBUG_STATE
@@ -82,7 +93,7 @@ def _change_debug_text(sender, app_data, user_data):
 
 @torch.inference_mode()
 def update_camera(model: torch.nn.Module):
-    global last_camera_update, UPDATE_CAMERA_RATE, dets
+    global last_camera_update, UPDATE_DETECTIONS_RATE, dets
 
     if not dpg.does_item_exist(CAM_W_IMG):
         return
@@ -95,7 +106,7 @@ def update_camera(model: torch.nn.Module):
     shape = img_tensor.size()[1:]
     img_tensor = torch.from_numpy(np.asarray(T.ToPILImage()(img_tensor).resize((1900, 1080))))
     img_tensor = img_tensor.permute(2, 0, 1)
-    if time.time() * 1000 - last_camera_update > UPDATE_CAMERA_RATE: # update every UCR ms the bounding boxes
+    if time.time() * 1000 - last_camera_update > UPDATE_DETECTIONS_RATE: # update every UCR ms the bounding boxes
         last_camera_update = time.time() * 1000
 
         img_tensor = T.ConvertImageDtype(torch.float32)(img_tensor)
@@ -111,8 +122,10 @@ def update_camera(model: torch.nn.Module):
     img_normalized = img_data / 255
     dpg.set_value(CAM_W_IMG, img_normalized)
 
+
 def _release_video_capture(sender, app_data, user_data):
     video_capture.release()
+
 
 def _capture_camera(sender, app_data, user_data):
     global video_capture, img_normalized
@@ -136,7 +149,7 @@ def _capture_camera(sender, app_data, user_data):
 
 @torch.inference_mode()
 def update_screen_area(model: torch.nn.Module):
-    global last_camera_update, UPDATE_CAMERA_RATE, dets
+    global last_camera_update, UPDATE_DETECTIONS_RATE, dets
 
     if not dpg.does_item_exist(DIM_W) or not dpg.is_item_visible(DIM_W):
         return
@@ -152,7 +165,7 @@ def update_screen_area(model: torch.nn.Module):
     shape = img_tensor.size()[1:]
     img_tensor = torch.from_numpy(np.asarray(T.ToPILImage()(img_tensor).resize((1900, 1080))))
     img_tensor = img_tensor.permute(2, 0, 1)
-    if time.time() * 1000 - last_camera_update > UPDATE_CAMERA_RATE: # update every UCR ms the bounding boxes
+    if time.time() * 1000 - last_camera_update > UPDATE_DETECTIONS_RATE: # update every UCR ms the bounding boxes
         last_camera_update = time.time() * 1000
 
         img_tensor = T.ConvertImageDtype(torch.float32)(img_tensor)
@@ -168,6 +181,7 @@ def update_screen_area(model: torch.nn.Module):
     img = img.flatten().astype(np.float32)
     img_normalized = img / 255
     dpg.set_value(SC_C, img_normalized)
+
 
 def _get_screen_area():
     if not dpg.does_item_exist(DIM_W):
@@ -193,7 +207,15 @@ def _get_screen_area():
         dpg.show_item(DIM_W)
         dpg.show_item(SC_W)
 
+
 def apply_inplace_filters(dets) -> None:
+    """
+    Applies the thresh, game-specific, second-nms and grouping detection filters. All are in-place operations.
+
+    :param dets: detections returned by net
+    :return: nothing
+    """
+
     global current_game
 
     filter_under_thresh(dets)
@@ -201,7 +223,15 @@ def apply_inplace_filters(dets) -> None:
     second_nms(dets)
     filter_non_group_detections(current_game, dets)
 
+
 def check_if_change_detections(dets) -> None:
+    """
+    Check if we should change the current detection for the player hand or cards pot. In case the same new hand has been
+    detected X times in a row, we change the detection accordingly. The reasoning is to avoid noisy detections.
+
+    :param dets: detections returned by the net
+    :return: nothing
+    """
     global last_player_hand, last_card_pot, same_cp_in_a_row, same_ph_in_a_row, DET_ROW_THRES, cards_pot, \
            player_hand, player_hand_labels, cards_pot_labels
 
@@ -220,8 +250,8 @@ def check_if_change_detections(dets) -> None:
             print(f"I think card pot is {cards_pot_labels}")
 
 @torch.inference_mode()
-def get_selected_window_texture(model: torch.nn.Module):
-    global selected_window, img_normalized, last_camera_update, UPDATE_CAMERA_RATE, dets, CR_PROC_Y, CR_PROC_X, CR_PROC_HH, CR_PROC_WH,\
+def update_selected_window(model: torch.nn.Module):
+    global selected_window_hwnd, img_normalized, last_camera_update, UPDATE_DETECTIONS_RATE, dets, CR_PROC_Y, CR_PROC_X, CR_PROC_HH, CR_PROC_WH,\
     current_game, cards_pot, player_hand
 
     if not dpg.does_item_exist(CR_PROC_TEXT):
@@ -230,20 +260,20 @@ def get_selected_window_texture(model: torch.nn.Module):
     h = dpg.get_value(CR_PROC_HH) if dpg.get_value(CR_PROC_HH) > 100 else 100
     x = dpg.get_value(CR_PROC_X)
     y = dpg.get_value(CR_PROC_Y)
-    img = grab_selected_window_contents(selected_window, w, h, x, y)
-    img = cv.cvtColor(img, cv.COLOR_RGB2RGBA)
-    img = np.asarray(Image.fromarray(img).resize((FRCNN_W, FRCNN_H)))
+    img, _ = grab_selected_window_contents(hwnd=selected_window_hwnd, w=w, h=h, x=x, y=y)
+    img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
+    img = np.asarray(Image.fromarray(img).resize((FRCNN_W, FRCNN_H))) # resize to net dimensions
     img_tensor = torch.from_numpy(img[:, :, :3])
     img_tensor = img_tensor.permute(2, 0, 1)
     shape = img_tensor.size()[1:]
     # img_tensor = torch.from_numpy(np.asarray(T.ToPILImage()(img_tensor).resize((1900, 1080))))
     # img_tensor = img_tensor.permute(2, 0, 1)
-    if time.time() * 1000 - last_camera_update > UPDATE_CAMERA_RATE: # update every UCR ms the bounding boxes
+    if time.time() * 1000 - last_camera_update > UPDATE_DETECTIONS_RATE: # update every UCR ms the bounding boxes
         last_camera_update = time.time() * 1000
 
         img_tensor = T.ConvertImageDtype(torch.float32)(img_tensor)
         img_tensor = img_tensor.to("cuda")
-        detections = model(img_tensor.unsqueeze(0))
+        detections = model(img_tensor.unsqueeze(0)) # act as batch of 1 x img_tensor
         dets = detections[0]
         apply_inplace_filters(dets)
         cards_pot, player_hand = get_player_hand(current_game, dets)
@@ -261,15 +291,15 @@ def get_selected_window_texture(model: torch.nn.Module):
     dpg.set_value(CR_PROC_TEXT, img_normalized)
 
 def _change_active_window(sender, app_data, user_data):
-    global CR_PROCESS, img_normalized, selected_window, CR_PROC_DIM, FRCNN_H, FRCNN_W, CR_PROC_X, CR_PROC_Y, CR_PROC_HH, CR_PROC_WH, \
+    global CR_PROCESS, img_normalized, selected_window_title, selected_window_hwnd, CR_PROC_DIM, FRCNN_H, FRCNN_W, CR_PROC_X, CR_PROC_Y, CR_PROC_HH, CR_PROC_WH, \
            PLAYER_HAND, pleft, pright, ptop, pbot, CARDS_POT, cleft, cright, ctop, cbot
 
     if not dpg.does_item_exist(CR_PROCESS):
         with dpg.window(tag=CR_PROCESS, width=FRCNN_W, height=FRCNN_H):
             w = FRCNN_W
             h = FRCNN_H
-            selected_window = app_data
-            img = grab_selected_window_contents(app_data, w, h)
+            selected_window_title = app_data
+            img, selected_window_hwnd = grab_selected_window_contents(wName=selected_window_title, w=w, h=h)
             imc = img.copy()
             # img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
             img = img.flatten().astype(np.float32)

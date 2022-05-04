@@ -14,8 +14,18 @@ score. The second condition comes in handy with false positives that are not eve
 happen, but have almost negligible scores, usually.
 """
 
+
 # in-place operation
 def second_nms(detection: Dict[str, torch.Tensor]) -> None:
+    """
+    Apply nms over the new detections again. For reasons I'm not sure of, the net (frcnn specifically) seems to detect
+    multiple times different cards in the same place, with the caveat that wrong detections have (very) low probabilities
+    compared to the good detection. By doing nms again we supress all such detections.
+
+    :param detection: detections returned by net
+    :return: nothing
+    """
+
     boxes = detection["boxes"]
     bad_boxes = set()
     scores = detection["scores"]
@@ -42,8 +52,17 @@ def second_nms(detection: Dict[str, torch.Tensor]) -> None:
         detection["scores"] = torch.as_tensor([])
         detection["labels"] = torch.as_tensor([])
 
+
 # in-place operation
 def filter_under_thresh(detection: Dict[str, torch.Tensor]) -> None:
+    """
+    Filter all detections under a certain threshold. Just another way of removing possibly fake detections, real detections
+    usually have >80% score, and very often >95%. Good detection with scores under 75% (the thresh I've chosen) are
+    exceedingly rare.
+
+    :param detection: detections returned by the net
+    :return: nothing
+    """
     boxes = detection["boxes"]
     bad_boxes = set()
     scores = detection["scores"]
@@ -74,10 +93,11 @@ def filter_under_thresh(detection: Dict[str, torch.Tensor]) -> None:
 def filter_detections_by_game(game: str, detection: Dict[str, torch.Tensor]) -> None:
     """
     In-place operation that removes impossible detections (i.e. Joker in a game that doesn't utilize Jokers) from
-    detections. Useful for removing faulty joker detections and removing irrelevant card detections
+    detections. Useful for removing faulty joker detections and removing irrelevant card detections.
+
     :param game: string repesenting game name
     :param detection: detection given by model
-    :return:
+    :return: nothing
     """
     bad_labels = []
     if game == "Blackjack" or game == "Razboi" or game == "Poker Texas Hold'Em":
@@ -118,7 +138,7 @@ def filter_detections_by_game(game: str, detection: Dict[str, torch.Tensor]) -> 
         detection["labels"] = torch.as_tensor([])
 
 
-def filter_non_group_detections(game: str, detections: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+def filter_non_group_detections(game: str, detections: Dict[str, torch.Tensor]) -> None:
     """
     Filter detections that are too far away from any group of cards detected. "Groups" are defined as two or more
     cards close enough together. When checking distances in-between detections, we will ignore distances between detections
@@ -127,15 +147,25 @@ def filter_non_group_detections(game: str, detections: Dict[str, torch.Tensor]) 
     model won't be able to play games that require multiple decks, but I believe there could be found solutions for them
     too, as a possible future extension of the program.
     If having a group with only one card is possible, only the one-card group with the highest score will be considered.
+
     :param game: the game being played, it's necessary for games like blackjack where a group can consist of only one card
     :param detections: detections returned by the model, they are supposed to be filtered beforehand using the other filters
-    :return: filtered detections
+    :return: nothing
     """
     boxes = detections["boxes"]
     scores = detections["scores"]
     labels = detections["labels"]
 
-    def distance_between_boxes(b1, b2):
+    def distance_between_boxes(box1: torch.Tensor, box2: torch.Tensor) -> float:
+        """
+        Return distance from center of boxes to each other. Not perfect, but much easier to write than a comprehensive
+        distance check.
+
+        :param box1: box of (x1, y1, x2, y2) coords
+        :param box2: box of (x1, y1, x2, y2) coords
+        :return: distance float
+        """
+
         x11, y11, x12, y12 = box1.cpu()
         x1c = (x11 + x12) / 2
         y1c = (y11 + y12) / 2
@@ -145,21 +175,17 @@ def filter_non_group_detections(game: str, detections: Dict[str, torch.Tensor]) 
 
         return np.sqrt((x2c - x1c) ** 2 + (y2c - y1c) ** 2)
 
-
-
-    if game == "Poker Texas Hold'Em":
+    if game == "Poker Texas Hold'Em": # in poker, there will never be a valid detection of only one card
         no_one_groups = True
-    else:
+    else: # all other games I've introduced have valid detections of only one card per group
         no_one_groups = False
     one_group = None
     good_indices = []
-    MIN_DIST = 300
+    MIN_DIST = 300 # minimum distance between x and one of the members of the group so that we may consider x a new member of the group
     for idx, (box1, label1, score1) in enumerate(zip(boxes, labels, scores)):
         min_dist = None
         for idy, (box2, label2, score2) in enumerate(zip(boxes, labels, scores)):
             if idx == idy:
-                continue
-            if label1 == label2:
                 continue
             dist = distance_between_boxes(box1, box2)
             if dist > MIN_DIST:
