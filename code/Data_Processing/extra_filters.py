@@ -20,9 +20,14 @@ def filter_same_card(detections: Dict[str, torch.Tensor], cards_pot: List[int], 
     labels = detections["labels"]
     scores = detections["scores"]
 
-    labels_so_far = set()
+    labels_so_far_player = set()
+    labels_so_far_card = set()
     good_indices = []
     for idx, (box, label, score) in enumerate(zip(boxes, labels, scores)):
+        if idx in cards_pot:
+            labels_so_far = labels_so_far_player
+        else:
+            labels_so_far = labels_so_far_card
         if label.item() in labels_so_far:
             continue
         labels_so_far.add(label.item())

@@ -18,6 +18,7 @@ import dearpygui.dearpygui as dpg
 from Models.Vision.faster import train_frcnn, validate, train_fccnn_reference, get_faster
 from Utils.utils import load_dataloader, get_loader
 
+
 def main():
     main_font = create_dpg_env()
     create_main_window(main_font)

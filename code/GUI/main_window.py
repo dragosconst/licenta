@@ -249,6 +249,7 @@ def check_if_change_detections(dets) -> None:
         if same_cp_in_a_row == DET_ROW_THRES:
             print(f"I think card pot is {cards_pot_labels}")
 
+
 @torch.inference_mode()
 def update_selected_window(model: torch.nn.Module):
     global selected_window_hwnd, img_normalized, last_camera_update, UPDATE_DETECTIONS_RATE, dets, CR_PROC_Y, CR_PROC_X, CR_PROC_HH, CR_PROC_WH,\
@@ -290,6 +291,7 @@ def update_selected_window(model: torch.nn.Module):
     img_normalized = img / 255
     dpg.set_value(CR_PROC_TEXT, img_normalized)
 
+
 def _change_active_window(sender, app_data, user_data):
     global CR_PROCESS, img_normalized, selected_window_title, selected_window_hwnd, CR_PROC_DIM, FRCNN_H, FRCNN_W, CR_PROC_X, CR_PROC_Y, CR_PROC_HH, CR_PROC_WH, \
            PLAYER_HAND, pleft, pright, ptop, pbot, CARDS_POT, cleft, cright, ctop, cbot
@@ -325,6 +327,7 @@ def _change_game(sender, app_data, user_data):
     global current_game
 
     current_game = app_data
+
 
 def create_main_window(font):
     with dpg.window(tag=MAIN_WINDOW):
