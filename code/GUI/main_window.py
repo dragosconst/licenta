@@ -1,6 +1,7 @@
 import threading
 import time
 from typing import Tuple, List, Dict
+import dill as pickle
 
 import dearpygui.dearpygui as dpg
 import cv2 as cv
@@ -11,11 +12,14 @@ from PIL import Image
 
 from Windows_utils.windows import grab_all_open_windows, grab_selected_window_contents, grab_screen_area
 from Image_Processing.line_detection import get_lines_in_image
+from Data_Processing.Raw_Train_Data.raw import pos_cls_inverse
 from Image_Processing.detection_draw import draw_detection
 from Data_Processing.detection_processing_resnet import second_nms, filter_under_thresh, filter_detections_by_game, filter_non_group_detections
 from Data_Processing.group_filtering import get_player_hand
 from Data_Processing.extra_filters import filter_same_card
 from Data_Processing.frame_hand_detection import compare_detections
+from Game_Engines.bj_enginge import BlackjackEngine
+from Game_Engines.base_engine import BaseEngine
 
 # window names and other constants
 
@@ -53,7 +57,8 @@ SEL_W = "selectw"
 # cards game specific constants
 # -----------------------------
 GAMES = ["Blackjack", "Poker Texas Hold'Em", "Razboi", "Macao", "Septica", "Solitaire"]
-current_game = None
+current_game = None # type: str
+current_game_engine = None # type: BaseEngine
 
 # image and net specific constants
 # --------------------------------
@@ -61,14 +66,14 @@ img_normalized = None
 video_capture = None
 UPDATE_DETECTIONS_RATE = 500 # ms interval at which to update our detections, used to avoid slowing down the program too much
 last_camera_update = 0
-dets = []
+dets = {} # type: Dict[str, torch.Tensor]
 selected_window_title = None
 selected_window_hwnd = None
 same_ph_in_a_row = 0
 same_cp_in_a_row = 0
 last_player_hand = []
 last_card_pot = []
-DET_ROW_THRES = 5
+DET_ROW_THRES = 3
 cards_pot = []
 cards_pot_labels = []
 player_hand = []
@@ -93,7 +98,7 @@ def _change_debug_text(sender, app_data, user_data):
 
 @torch.inference_mode()
 def update_camera(model: torch.nn.Module):
-    global last_camera_update, UPDATE_DETECTIONS_RATE, dets
+    global last_camera_update, UPDATE_DETECTIONS_RATE, dets, video_capture
 
     if not dpg.does_item_exist(CAM_W_IMG):
         return
@@ -242,12 +247,12 @@ def check_if_change_detections(dets) -> None:
 
     if same_ph_in_a_row >= DET_ROW_THRES:
         player_hand_labels = last_player_hand
-        if same_ph_in_a_row == DET_ROW_THRES:
-            print(f"I think hand is {player_hand_labels}")
+        # if same_ph_in_a_row == DET_ROW_THRES:
+        #     print(f"I think hand is {[pos_cls_inverse[l] for l in player_hand_labels]}")
     if same_cp_in_a_row >= DET_ROW_THRES:
         cards_pot_labels = last_card_pot
-        if same_cp_in_a_row == DET_ROW_THRES:
-            print(f"I think card pot is {cards_pot_labels}")
+        # if same_cp_in_a_row == DET_ROW_THRES:
+        #     print(f"I think card pot is {[pos_cls_inverse[l] for l in cards_pot_labels]}")
 
 
 @torch.inference_mode()
@@ -324,9 +329,27 @@ def _change_active_window(sender, app_data, user_data):
 
 
 def _change_game(sender, app_data, user_data):
-    global current_game
+    global current_game, current_game_engine
 
     current_game = app_data
+    if current_game == "Blackjack":
+        with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_state_replay.model", "rb") as f:
+            bj_agent = pickle.load(f)
+        current_game_engine = BlackjackEngine(bj_agent=bj_agent)
+
+
+def update_agent():
+    global current_game_engine, cards_pot, player_hand, dets
+
+    if current_game_engine is None or "labels" not in dets:
+        return
+    labels = dets["labels"]
+    player_labels = labels[player_hand].cpu().numpy()
+    player_labels = [pos_cls_inverse[l] for l in player_labels]
+    card_labels = labels[cards_pot].cpu().numpy()
+    card_labels = [pos_cls_inverse[l] for l in card_labels]
+    current_game_engine.update_detections(player_labels, card_labels)
+    current_game_engine.act()
 
 
 def create_main_window(font):

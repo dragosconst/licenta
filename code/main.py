@@ -13,7 +13,8 @@ import torchvision.transforms.functional as F
 import matplotlib.pyplot as plt
 import numpy as np
 
-from GUI.main_window import create_main_window, create_dpg_env, update_camera, update_screen_area, update_selected_window
+from GUI.main_window import create_main_window, create_dpg_env, update_camera, update_screen_area, update_selected_window,\
+                            update_agent
 import dearpygui.dearpygui as dpg
 from Models.Vision.faster import train_frcnn, validate, train_fccnn_reference, get_faster
 from Utils.utils import load_dataloader, get_loader
@@ -28,6 +29,7 @@ def main():
         update_camera(frcnn)
         update_screen_area(frcnn)
         update_selected_window(frcnn)
+        update_agent()
         dpg.render_dearpygui_frame()
     dpg.destroy_context()
 
