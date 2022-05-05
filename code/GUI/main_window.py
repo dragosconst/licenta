@@ -39,6 +39,7 @@ CR_PROC_WH = "cr_proc_dimwh"
 CR_PROC_HH = "cr_proc_dimhh"
 CR_PROC_X = "cr_proc_posx"
 CR_PROC_Y = "cr_proc_posy"
+CR_PROC_AG_BUT = "cr_proc_ag_but"
 CAM_W_IMG = "cam_img"
 CAM_C_IMG = "cam_c_img"
 DIM_W = "dimw"
@@ -64,7 +65,7 @@ current_game_engine = None # type: BaseEngine
 # --------------------------------
 img_normalized = None
 video_capture = None
-UPDATE_DETECTIONS_RATE = 500 # ms interval at which to update our detections, used to avoid slowing down the program too much
+UPDATE_DETECTIONS_RATE = 400 # ms interval at which to update our detections, used to avoid slowing down the program too much
 last_camera_update = 0
 dets = {} # type: Dict[str, torch.Tensor]
 selected_window_title = None
@@ -288,7 +289,7 @@ def update_selected_window(model: torch.nn.Module):
 
 
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets, cards_pot, player_hand)
-    img_pil = img_pil.resize((dpg.get_viewport_width(), dpg.get_viewport_height()))
+    img_pil = img_pil.resize((min(dpg.get_viewport_width(), FRCNN_W), min(dpg.get_viewport_height(), FRCNN_H)))
     # img_pil = img_pil.resize(shape[::-1])
     img[:dpg.get_viewport_height(), :dpg.get_viewport_width(), :3] = np.asarray(img_pil)
     # img = np.power(img, [1.2, 1.03, 1.0, 1.0])
@@ -297,9 +298,23 @@ def update_selected_window(model: torch.nn.Module):
     dpg.set_value(CR_PROC_TEXT, img_normalized)
 
 
+def _restart_agent(sender, app_data, user_data):
+    """
+    Wrapper fun to recall the change game function.
+
+    :param sender:
+    :param app_data:
+    :param user_data:
+    :return:
+    """
+    global current_game
+
+    print(f"I'm working")
+    _change_game(sender, current_game, user_data)
+
 def _change_active_window(sender, app_data, user_data):
     global CR_PROCESS, img_normalized, selected_window_title, selected_window_hwnd, CR_PROC_DIM, FRCNN_H, FRCNN_W, CR_PROC_X, CR_PROC_Y, CR_PROC_HH, CR_PROC_WH, \
-           PLAYER_HAND, pleft, pright, ptop, pbot, CARDS_POT, cleft, cright, ctop, cbot
+           PLAYER_HAND, pleft, pright, ptop, pbot, CARDS_POT, cleft, cright, ctop, cbot, CR_PROC_AG_BUT
 
     if not dpg.does_item_exist(CR_PROCESS):
         with dpg.window(tag=CR_PROCESS, width=FRCNN_W, height=FRCNN_H):
@@ -311,6 +326,7 @@ def _change_active_window(sender, app_data, user_data):
             # img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
             img = img.flatten().astype(np.float32)
             img_normalized = img / 255
+            dpg.add_button(label="Restart Agent", tag=CR_PROC_AG_BUT, callback=_restart_agent)
             with dpg.texture_registry(show=False):
                 dpg.add_raw_texture(w, h, img_normalized, tag=CR_PROC_TEXT)
             dpg.add_image(CR_PROC_TEXT)

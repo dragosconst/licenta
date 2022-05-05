@@ -49,7 +49,6 @@ class BlackjackEngine(BaseEngine):
         self.total_draws = 0
         self.total_losses = 0
 
-
     def update_detections(self, detected_player_hand: List, detected_card_pot: List):
         """
         Function that handles updating the engine's detections.
@@ -60,10 +59,18 @@ class BlackjackEngine(BaseEngine):
         """
         if time() - self.finished_time < self.WAIT_PERIOD:
             return
+        detected_player_hand = [1 if card[:-1] == "A" else card[:-1] for card in detected_player_hand]
+        detected_card_pot = [1 if card[:-1] == "A" else card[:-1] for card in detected_card_pot]
         # for blackjack, we only need to check the hand each time a new card is drawn (either by us or the dealer)
-        if len(self.player_hand) != len(detected_player_hand) or len(self.dealer_hand) != len(detected_card_pot): # for speed
-            self.player_hand = [1 if card[:-1] == "A" else card[:-1] for card in detected_player_hand]
-            self.dealer_hand = [1 if card[:-1] == "A" else card[:-1] for card in detected_card_pot]
+        if len(self.player_hand) != len(detected_player_hand) or len(self.dealer_hand) != len(detected_card_pot)\
+                or self.player_hand != detected_player_hand or self.dealer_hand != detected_card_pot: # for speed
+            self.player_hand = detected_player_hand
+            if detected_card_pot != self.dealer_hand:
+                self.dealer_hand = detected_card_pot
+                if self.state != BJStates.WAITING_FOR_DEALER and self.state != BJStates.RESETTING:
+                    print(f"Bad value for dealer detected.")
+                    print("-"*75)
+                    self.state = BJStates.RESETTING
             self.valid_change = True
 
     def act(self):
@@ -101,6 +108,7 @@ class BlackjackEngine(BaseEngine):
                     self.state = BJStates.DECIDING
                 else:
                     self.split_values.append(sum_hand(self.player_hand))
+                    self.finished_time = time()
                     self.state = BJStates.RESETTING
                 return
             ace = usable_ace(self.player_hand)
@@ -110,27 +118,35 @@ class BlackjackEngine(BaseEngine):
             action = self.agent.getAction(state)
             if action == 0:  # STAND
                 print(f"I'm standing.")
+                print(f"My cards are {self.player_hand}.")
+                print(f"Dealer cards are {self.dealer_hand}.")
                 self.state = BJStates.WAITING_FOR_DEALER
             elif action == 1:  # HIT
                 print(f"Hit me.")
+                print(f"My cards are {self.player_hand}.")
+                print(f"Dealer cards are {self.dealer_hand}.")
                 self.state = BJStates.HITTING
             elif action == 2:  # SPLIT
                 print(f"Split.")
+                print(f"My cards are {self.player_hand}.")
+                print(f"Dealer cards are {self.dealer_hand}.")
                 self.state = BJStates.SPLITTING
             elif action == 3:  # DOUBLE
                 print(f"Double")
+                print(f"My cards are {self.player_hand}.")
+                print(f"Dealer cards are {self.dealer_hand}.")
                 self.state = BJStates.DOUBLING
             if self.splits_left > 0 and self.state == BJStates.WAITING_FOR_DEALER:
                 self.state = BJStates.RESETTING
         # ---------------------------------------------
         elif self.state == BJStates.WAITING_FOR_DEALER:
             # just waiting for the dealer to reach a sum of 17
-            if self.splits_left > 0:
-                self.split_values.append(sum_hand(self.player_hand))
-
             dealer_sum = sum_hand(self.dealer_hand)
-            if dealer_sum >= 17:
+            if dealer_sum > 17 or (dealer_sum == 17 and not usable_ace(self.dealer_hand)):
                 self.state = BJStates.DECIDING
+                print(f"Dealer reached over 17.")
+                print(f"My cards are {self.player_hand}.")
+                print(f"Dealer cards are {self.dealer_hand}.")
         # ---------------------------------
         elif self.state == BJStates.HITTING:
             if self.valid_change:
@@ -139,12 +155,14 @@ class BlackjackEngine(BaseEngine):
                 if sum_player > 21:
                     print(f"Busted.")
                     self.total_losses += 1
+                    self.finished_time = time()
                     self.state = BJStates.RESETTING
                 else:
                     self.state = BJStates.THINKING
         # ------------------------------------
         elif self.state == BJStates.SPLITTING:
             self.splits_left += 2 - (self.splits_left == 0) # if we already split, than a new split in fact adds only one new hand
+            self.finished_time = time()
             self.state = BJStates.RESETTING
         # -----------------------------------
         elif self.state == BJStates.DOUBLING:
@@ -154,10 +172,12 @@ class BlackjackEngine(BaseEngine):
                 if sum_player > 21:
                     print(f"Busted.")
                     self.total_losses += 1
+                    self.finished_time = time()
                     self.state = BJStates.RESETTING
                 else:
                     self.state = BJStates.WAITING_FOR_DEALER
                 if self.splits_left > 0 and self.state == BJStates.WAITING_FOR_DEALER:
+                    self.finished_time = time()
                     self.state = BJStates.RESETTING
         # -----------------------------------
         elif self.state == BJStates.DECIDING:
@@ -189,6 +209,8 @@ class BlackjackEngine(BaseEngine):
                     self.total_losses += 1
             else:
                 for sum_player in self.split_values:
+                    if sum_player > 21:
+                        continue
                     if sum_dealer > 21:
                         print(f"Dealer busted. - split")
                         self.total_wins += 1
@@ -208,5 +230,7 @@ class BlackjackEngine(BaseEngine):
                         print(f"Dealer cards are {self.dealer_hand}.")
                         self.total_losses += 1
 
+            print("-"*75)
+            print("-"*75)
             self.state = BJStates.RESETTING
             self.finished_time = time()
