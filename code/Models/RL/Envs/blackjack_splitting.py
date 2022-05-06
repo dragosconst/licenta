@@ -78,7 +78,7 @@ class BlackjackEnvSplit(BlackjackEnv):
 
     def _get_obs(self):
         return (self.get_split_val(), sum_hand(self.player), 10 if self.dealer[0] in {"K", "Q", "J"}
-        else int(self.dealer[0]), usable_ace(self.player))
+        else int(self.dealer[0]), usable_ace(self.player), len(self.player) == 2)
 
     def reset(self, seed: Optional[int] = None, return_info = False):
         super().reset()

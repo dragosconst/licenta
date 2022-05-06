@@ -70,7 +70,7 @@ class MCAgent():
 
     # get epsilon to use for each episode using epsilon decay
     def get_epsilon(self, n_episode):
-        return max(self.start_epsilon * (self.epsilon_decay ** (n_episode / 5)), self.end_epsilon)
+        return max(self.start_epsilon * (self.epsilon_decay ** (n_episode / 7)), self.end_epsilon)
 
     def get_epsilon_visit_based(self, state):
         eps_decay = 0.999
@@ -78,27 +78,30 @@ class MCAgent():
         return max(self.start_epsilon * (eps_decay ** n), self.end_epsilon)
 
     def get_action(self, state):
-        split, *_ = state
+        split, *_, doubleable = state
         if state not in self.policy:
             action = self.env.action_space.sample()
-            while split is None and action == 2:
+            while (split is None and action == 2) \
+                    or (doubleable is False and action == 3):
                 action = self.env.action_space.sample()
             return action
         return self.policy[state]
 
     # select action based on epsilon greedy (or  not)
     def select_action(self, state, epsilon):
-        split, *_ = state
+        split, *_, doubleable = state
         if epsilon is not None and np.random.rand() < epsilon:
             action = self.env.action_space.sample()
-            while split is None and action == 2:
+            while (split is None and action == 2) \
+                    or (doubleable is False and action == 3):
                 action = self.env.action_space.sample()
         else:
             if state in self.q:
                 action = self.policy[state]
             else:
                 action = self.env.action_space.sample()
-                while split is None and action == 2:
+                while (split is None and action == 2) \
+                        or (doubleable is False and action == 3):
                     action = self.env.action_space.sample()
         return action
 
@@ -133,11 +136,12 @@ class MCAgent():
     # policy update with both e-greedy and regular argmax greedy
     def update_policy_q(self, eps=None):
         for state, values in self.q.items():
-            split, *_ = state
+            split, *_, doubleable = state
             if eps is not None:  # e-Greedy policy updates
                 if np.random.rand() < eps:
                     self.policy[state] = self.env.action_space.sample()  # sample a random action
-                    while split is None and self.policy[state] == 2:
+                    while (split is None and self.policy[state] == 2)\
+                          or (doubleable is False and self.policy[state] == 3):
                         self.policy[state] = self.env.action_space.sample()
                 else:
                     self.policy[state] = np.argmax(values)
@@ -189,7 +193,7 @@ class MCAgent():
                 if transitions[-1][2] >= 1:
                     good += 1
             print(f"Win rate so far is {(good / (samples + extra)) * 100}%, epoch {epoch}.")
-            with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_state_replay.model",
+            with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_correct_doubles_state_replay.model",
                       "wb") as f:
                 pickle.dump(bj_agent, f)
 
@@ -208,7 +212,7 @@ class MCAgent():
             if states[0][0] is not None and (int(states[0][0]) != 10 or int(
                     states[0][2]) != 10):  # first state was a split? in which case, do a state replay 3-4 times
                 states_replay = 3
-            if states[0][-1] and (int(states[0][1]) != 21 or int(states[0][2]) != 10):
+            if states[0][-2] and (int(states[0][1]) != 21 or int(states[0][2]) != 10):
                 states_replay = 3
 
             while states_replay >= 0:
@@ -410,64 +414,64 @@ if __name__ == "__main__":
 
     # MC eval
     bj_agent = MCAgent(env2)
-    bj_agent.mc_control(n_episode=int(2.5 * 10 ** 6), first_visit=True)
-    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_state_replay.model", "wb") as f:
+    bj_agent.mc_control(n_episode=int(3.5 * 10 ** 6), first_visit=True)
+    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_correct_doubles_state_replay.model", "wb") as f:
         pickle.dump(bj_agent, f)
-    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_state_replay.model", "rb") as f:
+    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_correct_doubles_state_replay.model", "rb") as f:
         bj_agent = pickle.load(f)
 
     # --------------------------------
     # draw moves table
     # --------------------------------
-    NO_SPLITS = 28
-    SPLITS = 36
-    moves = np.zeros((SPLITS, 10))
-    moves_visits = np.zeros((SPLITS, 10))
-    moves -= 1
-    for state, action in bj_agent.policy.items():
-        split, hand, dealer, ace = state
-        if split is None:
-            if action == 2:
-                print(state)
-            if not ace:
-                if dealer > 1:
-                    moves[hand - 5][dealer - 2] = action
-                    moves_visits[hand - 5][dealer - 2] = bj_agent.action_visits[state][action]
-                else:
-                    moves[hand - 5][-1] = action
-                    moves_visits[hand - 5][-1] = bj_agent.action_visits[state][action]
-            else:
-                if dealer > 1:
-                    moves[hand - 13 + 17][dealer - 2] = action
-                    moves_visits[hand - 13 + 17][dealer - 2] = bj_agent.action_visits[state][action]
-                else:
-                    moves[hand - 13 + 17][-1] = action
-                    moves_visits[hand - 13 + 17][-1] = bj_agent.action_visits[state][action]
-        else:
-            if split == 1:
-                split = 11
-            if dealer > 1:
-                moves[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][dealer - 2] = action
-                moves_visits[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][dealer - 2] = \
-                    bj_agent.action_visits[state][action]
-            else:
-                moves[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][-1] = action
-                moves_visits[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][-1] = \
-                    bj_agent.action_visits[state][action]
-
-    # --------------------------------
-    # heatmap of moves
-    # --------------------------------
-    xlabels = [2, 3, 4, 5, 6, 7, 8, 9, 10, "A"]
-    ylabs = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, "A,2",
-             "A,3", "A,4", "A,5", "A,6", "A,7", "A,8", "A,9", "A,10",
-             "2,2", "3,3", "4,4", "5,5", "6,6", "7,7", "8,8", "9,9", "10,10", "A,A"]
-    sn.heatmap(moves, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray')
-    plt.savefig("firstvisit_moves_BIG_state_replay.png")
-    plt.show()
-    sn.heatmap(moves_visits, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray', cmap="YlGnBu")
-    plt.savefig("firstvisit_moves_BIG_state_replay_visits.png")
-    plt.show()
+    # NO_SPLITS = 28
+    # SPLITS = 36
+    # moves = np.zeros((SPLITS, 10))
+    # moves_visits = np.zeros((SPLITS, 10))
+    # moves -= 1
+    # for state, action in bj_agent.policy.items():
+    #     split, hand, dealer, ace = state
+    #     if split is None:
+    #         if action == 2:
+    #             print(state)
+    #         if not ace:
+    #             if dealer > 1:
+    #                 moves[hand - 5][dealer - 2] = action
+    #                 moves_visits[hand - 5][dealer - 2] = bj_agent.action_visits[state][action]
+    #             else:
+    #                 moves[hand - 5][-1] = action
+    #                 moves_visits[hand - 5][-1] = bj_agent.action_visits[state][action]
+    #         else:
+    #             if dealer > 1:
+    #                 moves[hand - 13 + 17][dealer - 2] = action
+    #                 moves_visits[hand - 13 + 17][dealer - 2] = bj_agent.action_visits[state][action]
+    #             else:
+    #                 moves[hand - 13 + 17][-1] = action
+    #                 moves_visits[hand - 13 + 17][-1] = bj_agent.action_visits[state][action]
+    #     else:
+    #         if split == 1:
+    #             split = 11
+    #         if dealer > 1:
+    #             moves[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][dealer - 2] = action
+    #             moves_visits[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][dealer - 2] = \
+    #                 bj_agent.action_visits[state][action]
+    #         else:
+    #             moves[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][-1] = action
+    #             moves_visits[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][-1] = \
+    #                 bj_agent.action_visits[state][action]
+    #
+    # # --------------------------------
+    # # heatmap of moves
+    # # --------------------------------
+    # xlabels = [2, 3, 4, 5, 6, 7, 8, 9, 10, "A"]
+    # ylabs = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, "A,2",
+    #          "A,3", "A,4", "A,5", "A,6", "A,7", "A,8", "A,9", "A,10",
+    #          "2,2", "3,3", "4,4", "5,5", "6,6", "7,7", "8,8", "9,9", "10,10", "A,A"]
+    # sn.heatmap(moves, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray')
+    # plt.savefig("firstvisit_moves_BIG_double_correct_state_replay.png")
+    # plt.show()
+    # sn.heatmap(moves_visits, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray', cmap="YlGnBu")
+    # plt.savefig("firstvisit_moves_BIG_double_correct_state_replay_visits.png")
+    # plt.show()
     # print(moves)
 
     # bj_agent = TablePlayerFull()

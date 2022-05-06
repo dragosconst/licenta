@@ -88,7 +88,7 @@ class BlackjackEngine(BaseEngine):
             if len(self.player_hand) == 0 or len(self.dealer_hand) == 0 or not self.valid_change:
                 # if there's no (new) detection, don't do anything yet (maybe the dealer is flushing the deck etc.)
                 return
-
+            print(f"New hand.")
             if self.splits_left > 0:
                 self.splits_left -= 1
             else:
@@ -107,6 +107,7 @@ class BlackjackEngine(BaseEngine):
                 if self.split_values == 0:
                     self.state = BJStates.DECIDING
                 else:
+                    print(f"Blackjack - from split. change hand")
                     self.split_values.append(sum_hand(self.player_hand))
                     self.finished_time = time()
                     self.state = BJStates.RESETTING
@@ -137,6 +138,7 @@ class BlackjackEngine(BaseEngine):
                 print(f"Dealer cards are {self.dealer_hand}.")
                 self.state = BJStates.DOUBLING
             if self.splits_left > 0 and self.state == BJStates.WAITING_FOR_DEALER:
+                self.finished_time = time()
                 self.state = BJStates.RESETTING
         # ---------------------------------------------
         elif self.state == BJStates.WAITING_FOR_DEALER:
@@ -161,7 +163,7 @@ class BlackjackEngine(BaseEngine):
                     self.state = BJStates.THINKING
         # ------------------------------------
         elif self.state == BJStates.SPLITTING:
-            self.splits_left += 2 - (self.splits_left == 0) # if we already split, than a new split in fact adds only one new hand
+            self.splits_left += 2 - (self.splits_left == 0) # if we already split, then a new split in fact adds only one new hand
             self.finished_time = time()
             self.state = BJStates.RESETTING
         # -----------------------------------
