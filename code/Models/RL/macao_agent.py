@@ -150,7 +150,7 @@ class MacaoAgent:
         elif action == 1:
             if player_turns > 0:
                 return False
-            if len([card for card in cards_pot if card is not None]) == 1 and deck == 0:
+            if len([card for card in cards_pot if card is not None]) <= 1 and deck == 0:
                 return False
             last_card_idx = len(new_cards_pot) - 1
             # check if there's a drawing contest going on
@@ -331,11 +331,11 @@ class MacaoAgent:
 
     def train_step(self):
         train_batch = self.replay_buffer.sample(batch_size=self.batch_size)
-        batch_states = torch.stack([x[0] for x in train_batch])
-        batch_actions = torch.stack([x[1] for x in train_batch])
-        batch_rewards = torch.stack([x[2] for x in train_batch])
-        batch_nexts = torch.stack([x[3] for x in train_batch])
-        batch_dones = torch.stack([x[4] for x in train_batch])
+        batch_states = [x[0] for x in train_batch]
+        batch_actions = torch.as_tensor([x[1] for x in train_batch])
+        batch_rewards = torch.as_tensor([x[2] for x in train_batch])
+        batch_nexts =[x[3] for x in train_batch]
+        batch_dones = torch.as_tensor([x[4] for x in train_batch])
 
         if self.flip == 1:
             # use q1 for next state computations
