@@ -1,12 +1,14 @@
 import random
 from typing import List, Tuple
+import copy
 
 import gym
 from gym import spaces
 from gym.utils import seeding
 
 from Models.RL.Envs.macao_minmax import alpha_beta, State, Game
-from Models.RL.Envs.macao_utils import build_deck, draw_cards, draw_card, draw_hand,get_last_5_cards, get_card_suite, same_suite, shuffle_deck
+from Models.RL.Envs.macao_utils import build_deck, draw_cards, draw_card, draw_hand,get_last_5_cards, get_card_suite, same_suite, shuffle_deck,\
+                                        check_if_deck_empty
 
 
 class MacaoEnv(gym.Env):
@@ -60,7 +62,7 @@ class MacaoEnv(gym.Env):
 
     def __init__(self):
         super().__init__()
-        self.action_space = spaces.Discrete(5)
+        self.action_space = spaces.Discrete(6)
         self.seed()
 
         self.deck = build_deck()
@@ -75,17 +77,21 @@ class MacaoEnv(gym.Env):
 
     def reset(self):
         self.deck = build_deck()
-        self.cards_pot = [draw_card(self.deck, self.np_random)]
+        self.cards_pot, self.deck = draw_card(self.deck, self.np_random)
+        self.cards_pot = [self.cards_pot]
         self.suite = get_card_suite(self.cards_pot[-1])
 
-        self.player_hand = draw_hand(self.deck, self.np_random)
-        self.adversary_hand = draw_hand(self.deck, self.np_random)
+        self.player_hand, self.deck = draw_hand(self.deck, self.np_random)
+        self.adversary_hand, self.deck = draw_hand(self.deck, self.np_random)
         self.player_turns_to_wait = 0
         self.adversary_turns_to_wait = 0
         self.card_just_put = True
 
+        return self._get_obs()
+
     def _get_obs(self):
-        return set(self.player_hand), get_last_5_cards(self.cards_pot), self.suite, self.card_just_put
+        return set(self.player_hand), get_last_5_cards(self.cards_pot), self.player_turns_to_wait, self.suite, self.card_just_put,\
+                len(self.deck)
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -127,8 +133,9 @@ class MacaoEnv(gym.Env):
         return self.cards_pot[-1][0] == "A"
 
     def build_state_from_env(self):
-        game = Game(self.player_hand, self.adversary_hand, self.cards_pot, self.deck, self.suite, self.player_turns_to_wait,
-                    self.adversary_turns_to_wait, self.card_just_put, self.np_random, 0)
+        game = Game(copy.deepcopy(self.player_hand), copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot), \
+                    copy.deepcopy(self.deck), copy.deepcopy(self.suite), copy.deepcopy(self.player_turns_to_wait),
+                    copy.deepcopy(self.adversary_turns_to_wait), copy.deepcopy(self.card_just_put), copy.deepcopy(self.np_random), 0)
         return State(game_state=game, current_player=Game.MAXP, depth=2) # run min-max for 2 moves at first
 
     def final_state(self):
@@ -148,13 +155,6 @@ class MacaoEnv(gym.Env):
 
     def step(self, action, extra_info=None):
         assert action is None or self.action_space.contains(action)
-        if self.player_turns_to_wait > 0:
-            action = -1 # don't do anything if i don't have to draw or wait extra turns
-            if self.has_to_draw():
-                action = 2
-            elif self.has_to_wait():
-                action = 3
-            self.player_turns_to_wait -= 1
         reward = 0
         if action == 0:
             # put down card
@@ -168,13 +168,12 @@ class MacaoEnv(gym.Env):
         elif action == 1:
             # draw card
             if len(self.deck) == 0:
-                # deck empty, therefore shuffle cards pot
-                new_deck = self.cards_pot[:-1]
-                new_deck = shuffle_deck(new_deck)
-                self.deck = new_deck
-                self.cards_pot = self.cards_pot[-1]
+                print(f"len of cards pot is {len(self.cards_pot)}")
+            self.deck, self.cards_pot = check_if_deck_empty(self.deck, self.cards_pot)
             reward -= 1
-            new_card = draw_card(self.deck, self.np_random)
+            if len(self.deck) == 0:
+                print(f"len of cards pot is {len(self.cards_pot)}")
+            new_card, self.deck = draw_card(self.deck, self.np_random)
             self.card_just_put = False
             self.player_hand.append(new_card)
         elif action == 2:
@@ -193,7 +192,12 @@ class MacaoEnv(gym.Env):
                 elif self.cards_pot[last_card_idx] == "joker red":
                     cards_to_draw += 10
                 last_card_idx -= 1
-            new_cards = draw_cards(deck=self.deck, cards_pot=self.cards_pot, num=cards_to_draw, np_random=self.np_random)
+            if len(self.deck) == 0:
+                print(f"len of cards pot is bruh {len(self.cards_pot)}")
+            self.deck, self.cards_pot = check_if_deck_empty(self.deck, self.cards_pot)
+            if len(self.deck) == 0:
+                print(f"len of cards pot is bruhinos {len(self.cards_pot)}")
+            new_cards, self.deck = draw_cards(deck=self.deck, cards_pot=self.cards_pot, num=cards_to_draw, np_random=self.np_random)
             self.player_hand += new_cards
             self.card_just_put = False
             reward -= cards_to_draw
@@ -213,9 +217,17 @@ class MacaoEnv(gym.Env):
             assert extra_info[0] == "7"
             self.suite = [extra_info[-1]]
             self.card_just_put = True
+            self.player_hand.remove(extra_info[:2])
+            self.cards_pot.append(extra_info[:2])
             for card in self.player_hand:
                 if same_suite(self.suite, card):
                     reward += 1
+        elif action == 5:
+            assert self.player_turns_to_wait > 0
+            self.card_just_put = False
+
+        if self.player_turns_to_wait > 0:
+            self.player_turns_to_wait -= 1
 
         # change to new suite after player actions
         self.suite = get_card_suite(self.cards_pot[-1])
@@ -237,6 +249,7 @@ class MacaoEnv(gym.Env):
             self.suite = game_state.suite
             self.adversary_turns_to_wait = game_state.adv_turns
             self.card_just_put = game_state.just_put_card
+            reward += game_state.reward
 
         final = self.final_state()
         done = final != 0

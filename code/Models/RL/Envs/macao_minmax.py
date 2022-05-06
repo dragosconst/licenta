@@ -1,7 +1,8 @@
 from typing import List
 import copy
 
-from Models.RL.Envs.macao_utils import build_deck, draw_cards, draw_card, draw_hand,get_last_5_cards, get_card_suite, same_suite, shuffle_deck
+from Models.RL.Envs.macao_utils import build_deck, draw_cards, draw_card, draw_hand,get_last_5_cards, get_card_suite, same_suite, shuffle_deck,\
+                                        check_if_deck_empty
 
 class Game:
     MINP = 0
@@ -48,16 +49,17 @@ class Game:
         return self.cards_pot[last_card_idx][0] == card[0] or same_suite(self.suite, card)
 
     def check_legal_pass(self):
+        if len(self.deck) == 0 and len(self.cards_pot) == 1:
+            return False
         last_card_idx = len(self.cards_pot) - 1
         # check if there's a drawing contest going on
-        while last_card_idx >= 0 and self.cards_pot[last_card_idx][0] == "5":
+        while self.just_put_card and last_card_idx >= 0 and self.cards_pot[last_card_idx][0] == "5":
             # skip over redirects
             last_card_idx -= 1
-        if last_card_idx >= 0 and (self.cards_pot[last_card_idx][0] in {"2", "3"} or self.cards_pot[last_card_idx][:3] \
+        if self.just_put_card and last_card_idx >= 0 and (self.cards_pot[last_card_idx][0] in {"2", "3"} or self.cards_pot[last_card_idx][:3] \
             == "jok"):
-            # check if we are doing a valid contestation
             return False
-        if self.cards_pot[last_card_idx][0] == "A":
+        if self.just_put_card and self.cards_pot[last_card_idx][0] == "A":
             return False
         return True
 
@@ -66,10 +68,10 @@ class Game:
             return False
         last_card_idx = len(self.cards_pot) - 1
         # check if there's a drawing contest going on
-        while last_card_idx >= 0 and self.cards_pot[last_card_idx][0] == "5":
+        while self.just_put_card and last_card_idx >= 0 and self.cards_pot[last_card_idx][0] == "5":
             # skip over redirects
             last_card_idx -= 1
-        return last_card_idx >= 0 and (self.cards_pot[last_card_idx][0] in {"2", "3"} or self.cards_pot[last_card_idx][:3] \
+        return self.just_put_card and last_card_idx >= 0 and (self.cards_pot[last_card_idx][0] in {"2", "3"} or self.cards_pot[last_card_idx][:3] \
             == "jok")
 
     def check_legal_wait(self):
@@ -84,10 +86,20 @@ class Game:
     def adv_player(cls, player):
         return cls.MAXP if player == cls.MINP else cls.MINP
 
+    def has_to_draw(self):
+        if not self.just_put_card:
+            return False
+        return self.cards_pot[-1][0] in {"2", "3"} or self.cards_pot[-1][:3] == "jok"
+
+    def has_to_wait(self):
+        if not self.just_put_card:
+            return False
+        return self.cards_pot[-1][0] == "A"
+
     def final_state(self):
-        if len(self.player_hand) == 0:
+        if len(self.player_hand) == 0 and not self.has_to_wait() and not self.has_to_draw():
             return self.MINP
-        if len(self.adversary_hand) == 0:
+        if len(self.adversary_hand) == 0 and not self.has_to_wait() and not self.has_to_draw():
             return self.MAXP
         return None
 
@@ -111,16 +123,14 @@ class Game:
                                           [suite], self.player_turns, self.adv_turns, True, self.np_random, self.reward - 1))
 
             if self.check_legal_pass() and self.adv_turns == 0:
-                if len(self.deck) == 0:
-                    new_deck = self.cards_pot[:-1]
-                    new_deck = shuffle_deck(new_deck)
-                    self.deck = new_deck
-                    self.cards_pot = self.cards_pot[-1]
-                new_card = draw_card(self.deck, self.np_random)
+                new_deck = copy.deepcopy(self.deck)
+                new_cards_pot = copy.deepcopy(self.cards_pot)
+                new_deck, new_cards_pot = check_if_deck_empty(new_deck, new_cards_pot)
+                new_card, new_deck = draw_card(new_deck, self.np_random)
                 new_adv_hand = self.adversary_hand + [new_card]
                 if self.adv_turns > 0:
                     self.adv_turns -= 1
-                all_moves.append(Game(copy.deepcopy(self.player_hand), new_adv_hand, copy.deepcopy(self.cards_pot), copy.deepcopy(self.deck),
+                all_moves.append(Game(copy.deepcopy(self.player_hand), new_adv_hand, copy.deepcopy(new_cards_pot), copy.deepcopy(new_deck),
                                       copy.deepcopy(self.suite), self.player_turns, self.adv_turns, False, self.np_random,
                                       self.reward + 1))
             if self.check_legal_concede():
@@ -139,12 +149,19 @@ class Game:
                     elif self.cards_pot[last_card_idx] == "joker red":
                         cards_to_draw += 10
                     last_card_idx -= 1
-                new_cards = draw_cards(deck=self.deck, cards_pot=self.cards_pot, num=cards_to_draw, np_random=self.np_random)
+                if len(self.deck) == 0:
+                    print(f"{self.deck}, {self.cards_pot}")
+                new_deck = copy.deepcopy(self.deck)
+                new_cards_pot = copy.deepcopy(self.cards_pot)
+                new_deck, new_cards_pot = check_if_deck_empty(new_deck, new_cards_pot)
+                if len(self.deck) == 0:
+                    print(f"{self.deck}, {self.cards_pot}")
+                new_cards, new_deck = draw_cards(deck=new_deck, cards_pot=new_cards_pot, num=cards_to_draw, np_random=self.np_random)
                 new_adv_hand = self.adversary_hand + new_cards
                 if self.adv_turns > 0:
                     self.adv_turns -= 1
-                all_moves.append(Game(copy.deepcopy(self.player_hand), new_adv_hand, copy.deepcopy(self.cards_pot),
-                                      copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.player_turns,
+                all_moves.append(Game(copy.deepcopy(self.player_hand), new_adv_hand, copy.deepcopy(new_cards_pot),
+                                      copy.deepcopy(new_deck), copy.deepcopy(self.suite), self.player_turns,
                                       self.adv_turns, False, self.np_random, self.reward + cards_to_draw))
             elif self.check_legal_wait():
                 turns_to_wait = self.adv_turns
@@ -176,15 +193,13 @@ class Game:
 
             if self.check_legal_pass() and self.player_turns == 0:
                 if len(self.deck) == 0:
-                    new_deck = self.cards_pot[:-1]
-                    new_deck = shuffle_deck(new_deck)
-                    self.deck = new_deck
-                    self.cards_pot = self.cards_pot[-1]
-                new_card = draw_card(self.deck, self.np_random)
+                    print(f"{self.deck}, {self.cards_pot}")
+                new_deck = copy.deepcopy(self.deck)
+                new_cards_pot = copy.deepcopy(self.cards_pot)
+                new_deck, new_cards_pot = check_if_deck_empty(new_deck, new_cards_pot)
+                new_card, new_deck = draw_card(new_deck, self.np_random)
                 new_player_hand = self.player_hand + [new_card]
-                if self.player_turns > 0:
-                    self.player_turns -= 1
-                all_moves.append(Game(new_player_hand, copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot), copy.deepcopy(self.deck),
+                all_moves.append(Game(new_player_hand, copy.deepcopy(self.adversary_hand), copy.deepcopy(new_cards_pot), copy.deepcopy(new_deck),
                                       copy.deepcopy(self.suite), self.player_turns, self.adv_turns, False, self.np_random,
                                       self.reward - 1))
             if self.check_legal_concede():
@@ -203,12 +218,15 @@ class Game:
                     elif self.cards_pot[last_card_idx] == "joker red":
                         cards_to_draw += 10
                     last_card_idx -= 1
-                new_cards = draw_cards(deck=self.deck, cards_pot=self.cards_pot, num=cards_to_draw, np_random=self.np_random)
+                new_deck = copy.deepcopy(self.deck)
+                new_cards_pot = copy.deepcopy(self.cards_pot)
+                new_deck, new_cards_pot = check_if_deck_empty(new_deck, new_cards_pot)
+                new_cards, new_deck = draw_cards(deck=new_deck, cards_pot=new_cards_pot, num=cards_to_draw, np_random=self.np_random)
                 new_player_hand = self.player_hand + new_cards
                 if self.player_turns > 0:
                     self.player_turns -= 1
-                all_moves.append(Game(new_player_hand, copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot),
-                                      copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.player_turns,
+                all_moves.append(Game(new_player_hand, copy.deepcopy(self.adversary_hand), copy.deepcopy(new_cards_pot),
+                                      copy.deepcopy(new_deck), copy.deepcopy(self.suite), self.player_turns,
                                       self.adv_turns, False, self.np_random, self.reward - cards_to_draw))
             elif self.check_legal_wait():
                 turns_to_wait = self.player_turns
