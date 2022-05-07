@@ -101,7 +101,8 @@ class MacaoEnv(gym.Env):
 
     def _get_obs(self):
         return set(self.player_hand), self.cards_pot[-1], self.drawing_contest, self.turns_contest, self.player_turns_to_wait,\
-                self.adversary_turns_to_wait, self.suite, len(self.deck) == 0 and len(self.cards_pot) == 1
+                self.adversary_turns_to_wait, len(self.adversary_hand), self.suite, \
+               len(self.deck) == 0 and len(self.cards_pot) == 1
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)

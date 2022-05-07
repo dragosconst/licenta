@@ -1,5 +1,6 @@
 from typing import List, Tuple
 import random
+import time
 
 import torch
 import torch.nn as nn
@@ -22,7 +23,7 @@ class MacaoModel(nn.Module):
         self.pot_proj = nn.Linear(in_features=54, out_features=30)
 
         self.hidden_layers = nn.Sequential(
-            nn.Linear(in_features=69, out_features=200),
+            nn.Linear(in_features=70, out_features=200),
             nn.ReLU(),
             nn.Linear(in_features=200, out_features=125),
             nn.ReLU(),
@@ -36,13 +37,14 @@ class MacaoModel(nn.Module):
         # x is tuple of (hand, cards_pot, player_turns, suites, just_put, deck_np), where each element is already preprocessed for the net
         # the preprocessing consists of turning them to their one hot encoding and summing them
         # and turning them to tensors
-        hand, card_pot, drawing_contest, turns_contest, player_turns, adv_turns, suites, pass_flag = zip(*x)
+        hand, card_pot, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suites, pass_flag = zip(*x)
         hand = torch.stack(hand)
         card_pot = torch.stack(card_pot).float()
         drawing_contest = torch.stack(drawing_contest)
         turns_contest = torch.stack(turns_contest)
         player_turns = torch.stack(player_turns)
         adv_turns = torch.stack(adv_turns)
+        adv_len = torch.stack(adv_len)
         suites = torch.stack(suites)
         pass_flag = torch.stack(pass_flag)
 
@@ -52,13 +54,14 @@ class MacaoModel(nn.Module):
         turns_contest = turns_contest.to(self.device)
         player_turns = player_turns.to(self.device)
         adv_turns = adv_turns.to(self.device)
+        adv_len = adv_len.to(self.device)
         suites = suites.to(self.device)
         pass_flag = pass_flag.to(self.device)
 
         hand_proj = self.hand_proj(hand)
         card_proj = self.pot_proj(card_pot)
 
-        result = torch.cat((hand_proj, card_proj, drawing_contest, turns_contest, player_turns, adv_turns, suites, pass_flag), dim=1)
+        result = torch.cat((hand_proj, card_proj, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suites, pass_flag), dim=1)
 
         h = self.hidden_layers(result)
         output = self.output_layer(h)
@@ -80,15 +83,15 @@ class MacaoAgent:
         self.max_steps_per_episode = max_steps_per_episode
 
         self.lr = lr
-        self.q1 = MacaoModel("cuda")
-        self.q1.to("cuda")
+        self.q1 = MacaoModel("cpu")
+        self.q1.to("cpu")
         # gradient clipping
         for p in self.q1.parameters():
             if p.requires_grad:
                 p.register_hook(lambda grad: torch.clamp(grad, -1, 1))
         self.optim1 = Adam(self.q1.parameters(), lr=self.lr)
-        self.q2 = MacaoModel("cuda")
-        self.q2.to("cuda")
+        self.q2 = MacaoModel("cpu")
+        self.q2.to("cpu")
         for p in self.q2.parameters():
             if p.requires_grad:
                 p.register_hook(lambda grad: torch.clamp(grad, -1, 1))
@@ -109,7 +112,7 @@ class MacaoAgent:
         """
         Change state to form expected by the model.
         """
-        player_hand, last_card, drawing_contest, turns_contest, player_turns, adv_contest, suits, pass_flag = state
+        player_hand, last_card, drawing_contest, turns_contest, player_turns, adv_contest, adv_len, suits, pass_flag = state
         new_hand = torch.zeros(len(self.full_deck))
         for card in player_hand:
             new_hand[self.full_deck.index(card)] = 1
@@ -122,10 +125,11 @@ class MacaoAgent:
         pass_flag = torch.as_tensor([pass_flag])
 
         return new_hand, last_card, torch.as_tensor([drawing_contest]), torch.as_tensor([turns_contest]), \
-               torch.as_tensor([player_turns]), torch.as_tensor([adv_contest]), new_suits, torch.as_tensor([pass_flag])
+               torch.as_tensor([player_turns]), torch.as_tensor([adv_contest]), torch.as_tensor([adv_len]),\
+               new_suits, torch.as_tensor([pass_flag])
 
     def check_legal_action(self, state, action, extra_info):
-        hand, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, suits, pass_flag = state
+        hand, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suits, pass_flag = state
         last_card = None
         for idx, card in enumerate(cards_pot):
             if card:
@@ -266,12 +270,12 @@ class MacaoAgent:
                 q_hat = self.q2(states)
 
             q_hat_sorted = torch.argsort(q_hat, dim=1)
-            actions = []
+            actions = [None] * len(q_hat_sorted)
             for idx, action_idxs in enumerate(q_hat_sorted):
                 for action_idx in reversed(action_idxs):
                     action, extra_info = self.idx_to_action(action_idx)
                     if self.check_legal_action(states[idx], action, extra_info):
-                        actions.append((action, extra_info))
+                        actions[idx] = (action, extra_info)
                         break
         return actions
 
@@ -308,7 +312,6 @@ class MacaoAgent:
 
             current_state = new_state_proc
             self.total_steps += 1
-
             if done:
                 break
         avg_loss = (total_loss/num_loss_comp if num_loss_comp else 0)
@@ -332,18 +335,18 @@ class MacaoAgent:
             q_hat = self.q2(batch_nexts)
 
         q_hat_sorted = torch.argsort(q_hat, dim=1)
-        actions_idx = []
-        for idx, action_idxs in enumerate(q_hat_sorted):
-            for action_idx in reversed(action_idxs):
+        actions_as_idx_batch = [None] * len(q_hat_sorted)
+        # execution bottleneck
+        for idx, actions_as_idx_state in enumerate(q_hat_sorted):
+            for action_idx in reversed(actions_as_idx_state):
                 action, extra_info = self.idx_to_action(action_idx)
                 if self.check_legal_action(batch_states[idx], action, extra_info):
-                    actions_idx.append(action_idx)
+                    actions_as_idx_batch[idx] = action_idx
                     break
-        actions_idx = torch.as_tensor(actions_idx)
-        actions_idx = F.one_hot(actions_idx, num_classes=NUM_ACTIONS)
-        target_q = actions_idx * q_hat.cpu()
+        actions_as_idx_batch = torch.as_tensor(actions_as_idx_batch)
+        actions_as_idx_batch = F.one_hot(actions_as_idx_batch, num_classes=NUM_ACTIONS)
+        target_q = actions_as_idx_batch * q_hat.cpu()
         target_q = torch.sum(target_q, dim=1)
-
         # compute target q
         target_q = batch_rewards + (1 - batch_dones) * self.gamma * target_q
 
@@ -454,16 +457,16 @@ class MacaoAgent:
 
 
     def save_models(self):
-        torch.save(self.q1.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_newstates.model")
-        torch.save(self.q2.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_newstates.model")
+        torch.save(self.q1.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_newstate.model")
+        torch.save(self.q2.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_newstate.model")
 
 
 if __name__ == "__main__":
     env = MacaoEnv()
 
-    macao_agent = MacaoAgent(env=env, gamma=0.9, batch_size=64, replay_buff_size=128, lr=1e-3, pre_train_steps=100,
-                             eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.05, pre_train_steps=100,
-                                                                 final_eps_step=10 ** 4))
+    macao_agent = MacaoAgent(env=env, gamma=0.9, batch_size=64, replay_buff_size=128, lr=1e-3, pre_train_steps=300,
+                             eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.05, pre_train_steps=300,
+                                                                 final_eps_step=5 * 10 ** 2))
     # macao_agent.q1.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_300.model"))
     # macao_agent.q2.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_300.model"))
     # macao_agent.run_regular_episode()
