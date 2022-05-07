@@ -3,8 +3,6 @@ import random
 
 
 def draw_card(deck: List, np_random) -> Tuple[str, List]:
-    if len(deck) == 0:
-        print("sdasdasda")
     card = np_random.choice(deck)
     deck.remove(card)  # in-place
     return card, deck

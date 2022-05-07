@@ -35,18 +35,11 @@ class Game:
             return card[0] in {"2", "3", "4", "5"} or card[:3] == "jok"
 
         # now check if we are in a waiting turns contest, i.e. aces
-        if self.just_put_card and self.cards_pot[last_card_idx][0] == "A":
+        if self.just_put_card and self.cards_pot[-1][0] == "A":
             return card[0] == "A"
 
-        # check for the special case of trying to put down a joker as a beginning of a contest
-        if card[:3] == "jok":
-            if card == "joker black":
-                return self.cards_pot[last_card_idx][-1] in {"s", "c"}
-            elif card == "joker red":
-                return self.cards_pot[last_card_idx][-1] in {"h", "d"}
-
         # finally, we are left with the case of trying to put a regular card over another regular card
-        return self.cards_pot[last_card_idx][0] == card[0] or same_suite(self.suite, card)
+        return self.cards_pot[-1][0] == card[0] or same_suite(self.suite, card)
 
     def check_legal_pass(self):
         if len(self.deck) == 0 and len(self.cards_pot) == 1:
@@ -59,7 +52,7 @@ class Game:
         if self.just_put_card and last_card_idx >= 0 and (self.cards_pot[last_card_idx][0] in {"2", "3"} or self.cards_pot[last_card_idx][:3] \
             == "jok"):
             return False
-        if self.just_put_card and self.cards_pot[last_card_idx][0] == "A":
+        if self.just_put_card and self.cards_pot[-1][0] == "A":
             return False
         return True
 
@@ -149,13 +142,9 @@ class Game:
                     elif self.cards_pot[last_card_idx] == "joker red":
                         cards_to_draw += 10
                     last_card_idx -= 1
-                if len(self.deck) == 0:
-                    print(f"{self.deck}, {self.cards_pot}")
                 new_deck = copy.deepcopy(self.deck)
                 new_cards_pot = copy.deepcopy(self.cards_pot)
                 new_deck, new_cards_pot = check_if_deck_empty(new_deck, new_cards_pot)
-                if len(self.deck) == 0:
-                    print(f"{self.deck}, {self.cards_pot}")
                 new_cards, new_deck = draw_cards(deck=new_deck, cards_pot=new_cards_pot, num=cards_to_draw, np_random=self.np_random)
                 new_adv_hand = self.adversary_hand + new_cards
                 if self.adv_turns > 0:
@@ -192,8 +181,6 @@ class Game:
                                               self.reward + 1 + len([card for card in new_player_hand if same_suite([suite], card)])))
 
             if self.check_legal_pass() and self.player_turns == 0:
-                if len(self.deck) == 0:
-                    print(f"{self.deck}, {self.cards_pot}")
                 new_deck = copy.deepcopy(self.deck)
                 new_cards_pot = copy.deepcopy(self.cards_pot)
                 new_deck, new_cards_pot = check_if_deck_empty(new_deck, new_cards_pot)
@@ -295,6 +282,8 @@ def alpha_beta(alpha: int=-500, beta: int=500, state: State=None):
         return state
 
     state.possible_moves = state.moves()
+    if len(state.possible_moves) == 0:
+        print("????")
 
     if state.current_player == Game.MAXP:
         current_score = float('-inf')

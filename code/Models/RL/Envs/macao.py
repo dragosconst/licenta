@@ -109,18 +109,11 @@ class MacaoEnv(gym.Env):
             return card[0] in {"2", "3", "4", "5"} or card[:3] == "jok"
 
         # now check if we are in a waiting turns contest, i.e. aces
-        if self.card_just_put and self.cards_pot[last_card_idx][0] == "A":
+        if self.card_just_put and self.cards_pot[-1][0] == "A":
             return card[0] == "A"
 
-        # check for the special case of trying to put down a joker as a beginning of a contest
-        if card[:3] == "jok":
-            if card == "joker black":
-                return self.cards_pot[last_card_idx][-1] in {"s", "c"}
-            elif card == "joker red":
-                return self.cards_pot[last_card_idx][-1] in {"h", "d"}
-
         # finally, we are left with the case of trying to put a regular card over another regular card
-        return self.cards_pot[last_card_idx][0] == card[0] or same_suite(self.suite, card)
+        return self.cards_pot[-1][0] == card[0] or same_suite(self.suite, card)
 
     def has_to_draw(self):
         if not self.card_just_put:
@@ -165,14 +158,12 @@ class MacaoEnv(gym.Env):
             self.player_hand.remove(card)
             self.cards_pot.append(card)
             self.card_just_put = True
+            # change to new suite after player actions
+            self.suite = get_card_suite(self.cards_pot[-1])
         elif action == 1:
             # draw card
-            if len(self.deck) == 0:
-                print(f"len of cards pot is {len(self.cards_pot)}")
             self.deck, self.cards_pot = check_if_deck_empty(self.deck, self.cards_pot)
             reward -= 1
-            if len(self.deck) == 0:
-                print(f"len of cards pot is {len(self.cards_pot)}")
             new_card, self.deck = draw_card(self.deck, self.np_random)
             self.card_just_put = False
             self.player_hand.append(new_card)
@@ -192,11 +183,7 @@ class MacaoEnv(gym.Env):
                 elif self.cards_pot[last_card_idx] == "joker red":
                     cards_to_draw += 10
                 last_card_idx -= 1
-            if len(self.deck) == 0:
-                print(f"len of cards pot is bruh {len(self.cards_pot)}")
             self.deck, self.cards_pot = check_if_deck_empty(self.deck, self.cards_pot)
-            if len(self.deck) == 0:
-                print(f"len of cards pot is bruhinos {len(self.cards_pot)}")
             new_cards, self.deck = draw_cards(deck=self.deck, cards_pot=self.cards_pot, num=cards_to_draw, np_random=self.np_random)
             self.player_hand += new_cards
             self.card_just_put = False
@@ -229,15 +216,12 @@ class MacaoEnv(gym.Env):
         if self.player_turns_to_wait > 0:
             self.player_turns_to_wait -= 1
 
-        # change to new suite after player actions
-        self.suite = get_card_suite(self.cards_pot[-1])
-
         # let's take the following case:
         # adversary puts down a 2h and player has 2c
         # now, for whatever reason, player decides to concede
         # therefore, the adversary won, so we can end the calculation now
         final = self.final_state()
-        done = final != 0
+        done = 1 if final != 0 else 0
 
         if not done:
             new_state = alpha_beta(state=self.build_state_from_env()).best_next_state  # type: State
@@ -252,7 +236,7 @@ class MacaoEnv(gym.Env):
             reward += game_state.reward
 
         final = self.final_state()
-        done = final != 0
+        done = 1 if final != 0 else 0
 
         return self._get_obs(), reward + final, done
 
