@@ -20,10 +20,9 @@ class MacaoModel(nn.Module):
 
         self.hand_proj = nn.Linear(in_features=54, out_features=30)
         self.pot_proj = nn.Linear(in_features=54, out_features=30)
-        self.suite_proj = nn.Linear(in_features=4, out_features=2)
 
         self.hidden_layers = nn.Sequential(
-            nn.Linear(in_features=65, out_features=200),
+            nn.Linear(in_features=69, out_features=200),
             nn.ReLU(),
             nn.Linear(in_features=200, out_features=125),
             nn.ReLU(),
@@ -37,26 +36,29 @@ class MacaoModel(nn.Module):
         # x is tuple of (hand, cards_pot, player_turns, suites, just_put, deck_np), where each element is already preprocessed for the net
         # the preprocessing consists of turning them to their one hot encoding and summing them
         # and turning them to tensors
-        hand, card_pot, player_turns, suites, just_put, deck_no = zip(*x)
+        hand, card_pot, drawing_contest, turns_contest, player_turns, adv_turns, suites, pass_flag = zip(*x)
         hand = torch.stack(hand)
-        card_pot = torch.stack(card_pot)
+        card_pot = torch.stack(card_pot).float()
+        drawing_contest = torch.stack(drawing_contest)
+        turns_contest = torch.stack(turns_contest)
         player_turns = torch.stack(player_turns)
+        adv_turns = torch.stack(adv_turns)
         suites = torch.stack(suites)
-        just_put = torch.stack(just_put)
-        deck_no = torch.stack(deck_no)
+        pass_flag = torch.stack(pass_flag)
 
         hand = hand.to(self.device)
         card_pot = card_pot.to(self.device)
+        drawing_contest = drawing_contest.to(self.device)
+        turns_contest = turns_contest.to(self.device)
         player_turns = player_turns.to(self.device)
+        adv_turns = adv_turns.to(self.device)
         suites = suites.to(self.device)
-        just_put = just_put.to(self.device)
-        deck_no = deck_no.to(self.device)
+        pass_flag = pass_flag.to(self.device)
 
         hand_proj = self.hand_proj(hand)
         card_proj = self.pot_proj(card_pot)
-        suites = self.suite_proj(suites)
 
-        result = torch.cat((hand_proj, card_proj, player_turns, suites, just_put, deck_no), dim=1)
+        result = torch.cat((hand_proj, card_proj, drawing_contest, turns_contest, player_turns, adv_turns, suites, pass_flag), dim=1)
 
         h = self.hidden_layers(result)
         output = self.output_layer(h)
@@ -107,124 +109,71 @@ class MacaoAgent:
         """
         Change state to form expected by the model.
         """
-        player_hand, last_cards, player_turns, suits, just_moved, deck = state
+        player_hand, last_card, drawing_contest, turns_contest, player_turns, adv_contest, suits, pass_flag = state
         new_hand = torch.zeros(len(self.full_deck))
         for card in player_hand:
             new_hand[self.full_deck.index(card)] = 1
-        new_last = torch.zeros((len(self.full_deck)))
-        for idx, card in enumerate(last_cards):
-            if card is not None:
-                new_last[self.full_deck.index(card)] = idx + 1 # encode information about order in cards pot
+        last_card = F.one_hot(torch.as_tensor([self.full_deck.index(last_card)]), num_classes=54)[0]
         new_suits = torch.zeros(4)
         suit_list = ["s", "c", "d", "h"]
         for suit in suits:
             new_suits[suit_list.index(suit)] = 1
-        just_moved = 1 if just_moved else 0
-        just_moved = torch.as_tensor([just_moved])
+        pass_flag = 1 if pass_flag else 0
+        pass_flag = torch.as_tensor([pass_flag])
 
-
-        return new_hand, new_last, torch.as_tensor([player_turns]), new_suits, just_moved, torch.as_tensor([deck])
+        return new_hand, last_card, torch.as_tensor([drawing_contest]), torch.as_tensor([turns_contest]), \
+               torch.as_tensor([player_turns]), torch.as_tensor([adv_contest]), new_suits, torch.as_tensor([pass_flag])
 
     def check_legal_action(self, state, action, extra_info):
-        hand, cards_pot, player_turns, suits, just_moved, deck = state
-        new_cards_pot = [None] * 5
+        hand, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, suits, pass_flag = state
+        last_card = None
         for idx, card in enumerate(cards_pot):
             if card:
-                new_cards_pot[int(card.item()) - 1] = self.full_deck[idx]
+                last_card = self.full_deck[idx]
         new_hand = set()
         for idx, card in enumerate(hand):
             if card:
                 new_hand.add(self.full_deck[idx])
+        new_suits = set()
+        for idx, suit in enumerate(suits):
+            if suit:
+                new_suits.add(self.full_suits[idx])
 
         if action == 0:
             if player_turns > 0:
                 return False
             if extra_info not in new_hand:
                 return False
-            last_card_idx = len(new_cards_pot) - 1
-            # check if there's a drawing contest going on
-            while just_moved and last_card_idx >= 0 and new_cards_pot[last_card_idx] is not None and\
-                                                    new_cards_pot[last_card_idx][0] == "5":
-                # skip over redirects
-                last_card_idx -= 1
-            if just_moved and last_card_idx >= 0 and new_cards_pot[last_card_idx] is not None and (
-                    new_cards_pot[last_card_idx][0] in {"2", "3"} or new_cards_pot[last_card_idx][:3] \
-                    == "jok"):
-                # check if we are doing a valid contestation
+            if drawing_contest[0] > 0:
                 return extra_info[0] in {"2", "3", "4", "5"} or extra_info[:3] == "jok"
 
             # now check if we are in a waiting turns contest, i.e. aces
-            if just_moved and new_cards_pot[-1][0] == "A":
+            if turns_contest[0] > 0:
                 return extra_info[0] == "A"
 
             # finally, we are left with the case of trying to put a regular card over another regular card
-            return new_cards_pot[-1][0] == extra_info[0] or same_suite(suits, extra_info)
+            return last_card[0] == extra_info[0] or same_suite(new_suits, extra_info)
         elif action == 1:
             if player_turns > 0:
                 return False
-            if len([card for card in cards_pot if card != 0]) <= 1 and deck == 0:
+            if pass_flag[0]:
                 return False
-            last_card_idx = len(new_cards_pot) - 1
-            # check if there's a drawing contest going on
-            while just_moved and last_card_idx >= 0 and new_cards_pot[last_card_idx] is not None and\
-                                                    new_cards_pot[last_card_idx][0] == "5":
-                # skip over redirects
-                last_card_idx -= 1
-            if just_moved and last_card_idx >= 0 and new_cards_pot[last_card_idx] is not None and (
-                    new_cards_pot[last_card_idx][0] in {"2", "3"} or new_cards_pot[last_card_idx][:3] \
-                    == "jok"):
-                # can't pass during a contestation
-                return False
-            if just_moved and new_cards_pot[-1][0] == "A":
-                return False
-            return True
+            return drawing_contest[0] == 0 and turns_contest[0] == 0
         elif action == 2:
-            last_card_idx = len(new_cards_pot) - 1
-            # check if there's a drawing contest going on
-            while just_moved and last_card_idx >= 0 and new_cards_pot[last_card_idx] is not None and\
-                                                    new_cards_pot[last_card_idx][0] == "5":
-                # skip over redirects
-                last_card_idx -= 1
-            return just_moved and last_card_idx >= 0 and new_cards_pot[last_card_idx] is not None and (
-                    new_cards_pot[last_card_idx][0] in {"2", "3"} or new_cards_pot[last_card_idx][:3] \
-                    == "jok")
+            return drawing_contest[0] > 0
         elif action == 3:
-            return just_moved and new_cards_pot[-1][0] == "A"
+            return turns_contest[0] > 0
         elif action == 4:
             if player_turns > 0:
                 return False
             if extra_info[:2] not in new_hand:
                 return False
-            last_card_idx = len(new_cards_pot) - 1
-            # check if there's a drawing contest going on
-            while just_moved and last_card_idx >= 0 and new_cards_pot[last_card_idx] is not None and\
-                                                    new_cards_pot[last_card_idx][0] == "5":
-                # skip over redirects
-                last_card_idx -= 1
-            if just_moved and last_card_idx >= 0 and new_cards_pot[last_card_idx] is not None and (
-                    new_cards_pot[last_card_idx][0] in {"2", "3"} or new_cards_pot[last_card_idx][:3] \
-                    == "jok"):
-                # can't pass during a contestation
+            if extra_info[0] != "7":
                 return False
-            if just_moved and new_cards_pot[-1][0] == "A":
-                return False
-            return True
+            return drawing_contest[0] == 0 and turns_contest[0] == 0
         elif action == 5:
-            last_card_idx = len(new_cards_pot) - 1
-            # check if there's a drawing contest going on
-            while just_moved and last_card_idx >= 0 and new_cards_pot[last_card_idx] is not None and\
-                                                    new_cards_pot[last_card_idx][0] == "5":
-                # skip over redirects
-                last_card_idx -= 1
-            if just_moved and last_card_idx >= 0 and new_cards_pot[last_card_idx] is not None and (
-                    new_cards_pot[last_card_idx][0] in {"2", "3"} or new_cards_pot[last_card_idx][:3] \
-                    == "jok"):
-                # can't pass during a contestation
-                return False
-            if just_moved and new_cards_pot[-1][0] == "A":
-                return False
-            return player_turns > 0
-        return False # used for when it chooses action 4 but it has no 7s
+            return player_turns > 0 and drawing_contest[0] == 0 and turns_contest[0] == 0
+        return False  # used for when it chooses action 4 but it has no 7s
 
     def idx_to_action(self, idx):
         """
@@ -310,8 +259,10 @@ class MacaoAgent:
                 actions.append((action, extra_info))
         else:
             if self.flip == 1:
+                self.q1.eval()
                 q_hat = self.q1(states)
             else:
+                self.q2.eval()
                 q_hat = self.q2(states)
 
             q_hat_sorted = torch.argsort(q_hat, dim=1)
@@ -368,13 +319,15 @@ class MacaoAgent:
         batch_states = [x[0] for x in train_batch]
         batch_actions = torch.as_tensor([x[1] for x in train_batch])
         batch_rewards = torch.as_tensor([x[2] for x in train_batch])
-        batch_nexts =[x[3] for x in train_batch]
+        batch_nexts = [x[3] for x in train_batch]
         batch_dones = torch.as_tensor([x[4] for x in train_batch])
 
         if self.flip == 1:
+            self.q1.eval()
             # use q1 for next state computations
             q_hat = self.q1(batch_nexts)
         else:
+            self.q2.eval()
             # use q2 for next state computations
             q_hat = self.q2(batch_nexts)
 
@@ -388,7 +341,7 @@ class MacaoAgent:
                     break
         actions_idx = torch.as_tensor(actions_idx)
         actions_idx = F.one_hot(actions_idx, num_classes=NUM_ACTIONS)
-        target_q = actions_idx * q_hat.to("cpu")
+        target_q = actions_idx * q_hat.cpu()
         target_q = torch.sum(target_q, dim=1)
 
         # compute target q
@@ -404,7 +357,7 @@ class MacaoAgent:
             optim = self.optim1
 
         batch_actions = F.one_hot(batch_actions, num_classes=NUM_ACTIONS)
-        predicted_q = batch_actions * q_states.to("cpu")
+        predicted_q = batch_actions * q_states.cpu()
         predicted_q = torch.sum(predicted_q, dim=1)
 
         # backward prop
@@ -425,25 +378,94 @@ class MacaoAgent:
             episodes_rewards.append(ep_reward)
             avg_losses.append(avg_loss)
 
-            if e % 50 == 0:
+            if e % 20 == 0:
                 print(f"Epsiode {e}.")
                 print(f"Reward is {ep_reward}.")
                 print(f"Loss is {avg_loss}.")
                 print(f"Avg reward so far is {sum(episodes_rewards)/len(episodes_rewards)}.")
                 print(f"Avg loss so far is {sum(avg_losses)/len(avg_losses)}.")
-                torch.save(self.q1.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_{e}.model")
-                torch.save(self.q2.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_{e}.model")
+                torch.save(self.q1.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_{e}_newstate.model")
+                torch.save(self.q2.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_{e}_newstate.model")
+
+    def make_state_readable(self, state):
+        hand, cards_pot, player_turns, suits, just_put, deck_len = state
+        new_cards_pot = [None] * 5
+        for idx, card in enumerate(cards_pot):
+            if card:
+                new_cards_pot[int(card.item()) - 1] = self.full_deck[idx]
+        new_hand = set()
+        for idx, card in enumerate(hand):
+            if card:
+                new_hand.add(self.full_deck[idx])
+        turns = player_turns[0].item()
+        suit_str = []
+        for idx, flag in enumerate(suits):
+            if flag:
+                suit_str.append(self.full_suits[idx])
+        just_put = just_put[0].item()
+        deck_len = deck_len[0].item()
+        print(f"Hand is {new_hand}.")
+        print(f"Card pot is {new_cards_pot}")
+        print(f"Waiting turns is {turns}.")
+        print(f"Suits is {suit_str}.")
+        print(f"Just put is {just_put}.")
+        print(f"Deck is {deck_len}.")
+
+    @torch.inference_mode()
+    def run_regular_episode(self):
+        self.q1.eval()
+        self.q2.eval()
+        """
+        Run a single training episode
+        """
+        init = self.env.reset()
+
+        ep_reward = 0
+        current_state = self.process_state(init)
+        current_action = None
+        total_loss = 0
+        num_loss_comp = 0
+        epsilon = 1.0
+
+        for ep_step in range(self.max_steps_per_episode):
+            self.make_state_readable(current_state)
+            epsilon = self.eps_scheduler.get_value(step=self.total_steps)
+
+            batch = [current_state]
+            self.flip = random.choice([1, 2])
+            actions = self.get_action(batch, eps=0)
+            current_action, current_extra_info = actions[0]
+            print(f"Took action {current_action}, {current_extra_info}.")
+
+            new_state, reward, done = self.step(current_action, current_extra_info)
+            print(f"Got reward {reward}.")
+            print("-"*50)
+            new_state_proc = self.process_state(new_state)
+            ep_reward += reward
+
+            current_state = new_state_proc
+            self.total_steps += 1
+
+            if done:
+                break
+        avg_loss = (total_loss/num_loss_comp if num_loss_comp else 0)
+        print(f"Full reward is {ep_reward}.")
+        return ep_reward, avg_loss, epsilon
+
 
     def save_models(self):
-        torch.save(self.q1.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1.model")
-        torch.save(self.q2.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2.model")
+        torch.save(self.q1.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_newstates.model")
+        torch.save(self.q2.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_newstates.model")
 
 
 if __name__ == "__main__":
     env = MacaoEnv()
 
-    macao_agent = MacaoAgent(env=env, gamma=0.9, batch_size=64, lr=1e-3, pre_train_steps=100,
+    macao_agent = MacaoAgent(env=env, gamma=0.9, batch_size=64, replay_buff_size=128, lr=1e-3, pre_train_steps=100,
                              eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.05, pre_train_steps=100,
                                                                  final_eps_step=10 ** 4))
+    # macao_agent.q1.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_300.model"))
+    # macao_agent.q2.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_300.model"))
+    # macao_agent.run_regular_episode()
     macao_agent.train(max_episodes=10**4)
     macao_agent.save_models()

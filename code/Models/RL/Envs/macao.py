@@ -73,7 +73,8 @@ class MacaoEnv(gym.Env):
         self.adversary_hand = []
         self.player_turns_to_wait = 0
         self.adversary_turns_to_wait = 0
-        self.card_just_put = False
+        self.drawing_contest = 0
+        self.turns_contest = 0
 
     def reset(self):
         self.deck = build_deck()
@@ -85,51 +86,50 @@ class MacaoEnv(gym.Env):
         self.adversary_hand, self.deck = draw_hand(self.deck, self.np_random)
         self.player_turns_to_wait = 0
         self.adversary_turns_to_wait = 0
-        self.card_just_put = True
+        self.drawing_contest = 0
+        if self.cards_pot[-1][0] in {"2", "3"}:
+            self.drawing_contest = int(self.cards_pot[-1][0])
+        elif self.cards_pot[-1] == "joker black":
+            self.drawing_contest = 5
+        elif self.cards_pot[-1] == "joker red":
+            self.drawing_contest = 10
+        self.turns_contest = 0
+        if self.cards_pot[-1][0] == "A":
+            self.turns_contest = 1
 
         return self._get_obs()
 
     def _get_obs(self):
-        return set(self.player_hand), get_last_5_cards(self.cards_pot), self.player_turns_to_wait, self.suite, self.card_just_put,\
-                len(self.deck)
+        return set(self.player_hand), self.cards_pot[-1], self.drawing_contest, self.turns_contest, self.player_turns_to_wait,\
+                self.adversary_turns_to_wait, self.suite, len(self.deck) == 0 and len(self.cards_pot) == 1
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
     def check_legal_put(self, card):
-        last_card_idx = len(self.cards_pot) - 1
-        # check if there's a drawing contest going on
-        while self.card_just_put and last_card_idx >= 0 and self.cards_pot[last_card_idx][0] == "5":
-            # skip over redirects
-            last_card_idx -= 1
-        if self.card_just_put and last_card_idx >= 0 and (self.cards_pot[last_card_idx][0] in {"2", "3"} or self.cards_pot[last_card_idx][:3] \
-            == "jok"):
-            # check if we are doing a valid contestation
+        if self.drawing_contest > 0:
             return card[0] in {"2", "3", "4", "5"} or card[:3] == "jok"
 
         # now check if we are in a waiting turns contest, i.e. aces
-        if self.card_just_put and self.cards_pot[-1][0] == "A":
+        if self.turns_contest > 0:
             return card[0] == "A"
 
         # finally, we are left with the case of trying to put a regular card over another regular card
         return self.cards_pot[-1][0] == card[0] or same_suite(self.suite, card)
 
     def has_to_draw(self):
-        if not self.card_just_put:
-            return False
-        return self.cards_pot[-1][0] in {"2", "3"} or self.cards_pot[-1][:3] == "jok"
+        return self.drawing_contest > 0
 
     def has_to_wait(self):
-        if not self.card_just_put:
-            return False
-        return self.cards_pot[-1][0] == "A"
+        return self.turns_contest > 0
 
     def build_state_from_env(self):
         game = Game(copy.deepcopy(self.player_hand), copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot), \
-                    copy.deepcopy(self.deck), copy.deepcopy(self.suite), copy.deepcopy(self.player_turns_to_wait),
-                    copy.deepcopy(self.adversary_turns_to_wait), copy.deepcopy(self.card_just_put), copy.deepcopy(self.np_random), 0)
-        return State(game_state=game, current_player=Game.MAXP, depth=2) # run min-max for 2 moves at first
+                    copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.drawing_contest, self.turns_contest,
+                    copy.deepcopy(self.player_turns_to_wait), copy.deepcopy(self.adversary_turns_to_wait),
+                    copy.deepcopy(self.np_random), 0)
+        return State(game_state=game, current_player=Game.MAXP, depth=2)  # run min-max for 2 moves at first
 
     def final_state(self):
         """
@@ -139,12 +139,26 @@ class MacaoEnv(gym.Env):
             return 20
         if len(self.adversary_hand) == 0:
             for card in self.player_hand:
+                # check if player could potentially keep the game alive
                 if (card[0] in {"2", "3"} or card[:3] == "jok") and self.has_to_draw():
                     return 0
                 if card[0] == "A" and self.has_to_wait():
                     return 0
             return -20
         return 0
+
+    def process_put_down(self, card):
+        if card[0] in {"2", "3"}:
+            self.drawing_contest += int(card[0])
+        elif card[0] == "4":
+            self.drawing_contest = 0
+        # 5 just passes it to adversary so don't do anything for it
+        elif card == "joker black":
+            self.drawing_contest += 5
+        elif card == "joker red":
+            self.drawing_contest += 10
+        elif card[0] == "A":
+            self.turns_contest += 1
 
     def step(self, action, extra_info=None):
         assert action is None or self.action_space.contains(action)
@@ -157,7 +171,7 @@ class MacaoEnv(gym.Env):
             reward += 1
             self.player_hand.remove(card)
             self.cards_pot.append(card)
-            self.card_just_put = True
+            self.process_put_down(card)
             # change to new suite after player actions
             self.suite = get_card_suite(self.cards_pot[-1])
         elif action == 1:
@@ -165,45 +179,26 @@ class MacaoEnv(gym.Env):
             self.deck, self.cards_pot = check_if_deck_empty(self.deck, self.cards_pot)
             reward -= 1
             new_card, self.deck = draw_card(self.deck, self.np_random)
-            self.card_just_put = False
             self.player_hand.append(new_card)
         elif action == 2:
             # concede to start drawing cards
-            cards_to_draw = 0
-            last_card_idx = len(self.cards_pot) - 1
-            while last_card_idx >= 0 and self.cards_pot[last_card_idx][0] == "5":
-                # skip over redirects
-                last_card_idx -= 1
-            while last_card_idx >= 0 and (self.cards_pot[last_card_idx][0] in {"2", "3"} or self.cards_pot[last_card_idx][:3] \
-            == "jok"):
-                if self.cards_pot[last_card_idx][0] in {"2", "3"}:
-                    cards_to_draw += int(self.cards_pot[last_card_idx][0])
-                elif self.cards_pot[last_card_idx] == "joker black":
-                    cards_to_draw += 5
-                elif self.cards_pot[last_card_idx] == "joker red":
-                    cards_to_draw += 10
-                last_card_idx -= 1
+            cards_to_draw = self.drawing_contest
+            self.drawing_contest = 0
             self.deck, self.cards_pot = check_if_deck_empty(self.deck, self.cards_pot)
             new_cards, self.deck = draw_cards(deck=self.deck, cards_pot=self.cards_pot, num=cards_to_draw, np_random=self.np_random)
             self.player_hand += new_cards
-            self.card_just_put = False
             reward -= cards_to_draw
         elif action == 3:
             # concede to waiting for turns
-            turns_to_wait = self.player_turns_to_wait
-            last_card_idx = len(self.cards_pot) - 1
-            while last_card_idx >= 0 and self.cards_pot[last_card_idx][0] == "A":
-                turns_to_wait += 1
-                last_card_idx -= 1
+            turns_to_wait = self.player_turns_to_wait + self.turns_contest
+            self.turns_contest = 0
             self.player_turns_to_wait = turns_to_wait
-            self.card_just_put = False
             reward -= turns_to_wait
         elif action == 4:
             # change suite with a 7
             assert extra_info is not None
             assert extra_info[0] == "7"
             self.suite = [extra_info[-1]]
-            self.card_just_put = True
             self.player_hand.remove(extra_info[:2])
             self.cards_pot.append(extra_info[:2])
             for card in self.player_hand:
@@ -211,7 +206,6 @@ class MacaoEnv(gym.Env):
                     reward += 1
         elif action == 5:
             assert self.player_turns_to_wait > 0
-            self.card_just_put = False
 
         if self.player_turns_to_wait > 0:
             self.player_turns_to_wait -= 1
@@ -229,10 +223,11 @@ class MacaoEnv(gym.Env):
             game_state = new_state.game_state
             self.adversary_hand = game_state.adversary_hand
             self.cards_pot = game_state.cards_pot
+            self.drawing_contest = game_state.drawing_contest
+            self.turns_contest = game_state.turns_contest
             self.deck = game_state.deck
             self.suite = game_state.suite
             self.adversary_turns_to_wait = game_state.adv_turns
-            self.card_just_put = game_state.just_put_card
             reward += game_state.reward
 
         final = self.final_state()
