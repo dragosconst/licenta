@@ -47,7 +47,7 @@ class Game:
         return self.turns_contest > 0
 
     def check_legal_switch(self, card):
-        return card[0] == 7 and self.turns_contest == 0 and self.drawing_contest == 0
+        return card[0] == "7" and self.turns_contest == 0 and self.drawing_contest == 0
 
     @classmethod
     def adv_player(cls, player):
