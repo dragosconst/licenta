@@ -106,6 +106,7 @@ class MacaoRandom:
         if action == 0:
             self.adversary_hand.remove(extra_info)
             self.cards_pot.append(extra_info)
+            self.suite = get_card_suite(extra_info)
             self.drawing_contest += self.process_turns(extra_info)
             self.reward -= 1
         elif action == 1:

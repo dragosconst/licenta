@@ -9,8 +9,8 @@ from torch.optim import Adam
 import numpy as np
 from tqdm import trange
 
-from Models.RL.Envs.macao import MacaoEnv, same_suite
-from Models.RL.Envs.macao_utils import build_deck
+from Models.RL.Envs.macao import MacaoEnv
+from Models.RL.Envs.macao_utils import build_deck, same_suite
 from Models.RL.macao_agent_utils import LinearScheduleEpsilon, ReplayBuffer
 
 NUM_ACTIONS = 74
@@ -70,7 +70,8 @@ class MacaoModel(nn.Module):
 
 class MacaoAgent:
     def __init__(self, env: MacaoEnv, replay_buff_size=100, gamma=0.9, batch_size=512, lr=1e-3, steps_per_dqn=20,
-                 pre_train_steps=1, eps_scheduler=LinearScheduleEpsilon(), max_steps_per_episode: int=200):
+                 pre_train_steps=1, eps_scheduler=LinearScheduleEpsilon(), max_steps_per_episode: int=200,
+                 tau: float=0.01):
         self.env = env
         self.full_deck = build_deck()
         self.full_7s = ["7s", "7c", "7d", "7h"]
@@ -83,26 +84,21 @@ class MacaoAgent:
         self.max_steps_per_episode = max_steps_per_episode
 
         self.lr = lr
-        self.q1 = MacaoModel("cpu")
-        self.q1.to("cpu")
+        self.q = MacaoModel("cpu")
+        self.q.to("cpu")
         # gradient clipping
-        for p in self.q1.parameters():
+        for p in self.q.parameters():
             if p.requires_grad:
                 p.register_hook(lambda grad: torch.clamp(grad, -1, 1))
-        self.optim1 = Adam(self.q1.parameters(), lr=self.lr)
-        self.q2 = MacaoModel("cpu")
-        self.q2.to("cpu")
-        for p in self.q2.parameters():
-            if p.requires_grad:
-                p.register_hook(lambda grad: torch.clamp(grad, -1, 1))
-        self.optim2 = Adam(self.q2.parameters(), lr=self.lr)
+        self.optim = Adam(self.q.parameters(), lr=self.lr)
+        self.q_target = MacaoModel("cpu")
+        self.q_target.to("cpu")
+        self.tau = tau
         self.batch_size = batch_size
         self.steps_per_dqn = steps_per_dqn
         self.pre_train_steps = pre_train_steps
         self.total_steps = 0
         self.eps_scheduler = eps_scheduler
-        self.flip = 1
-        self.total_steps = 0
 
     def step(self, action: int, extra_info: str=None) -> Tuple[Tuple, ...]:
         state, reward, done = self.env.step(action=action, extra_info=extra_info)
@@ -266,13 +262,7 @@ class MacaoAgent:
                 action, extra_info = random.sample(possible_actions, 1)[0]
                 actions.append((action, extra_info))
         else:
-            if self.flip == 1:
-                self.q1.eval()
-                q_hat = self.q1(states)
-            else:
-                self.q2.eval()
-                q_hat = self.q2(states)
-
+            q_hat = self.q(states)
             q_hat_sorted = torch.argsort(q_hat, dim=1)
             actions = [None] * len(q_hat_sorted)
             for idx, action_idxs in enumerate(q_hat_sorted):
@@ -299,7 +289,6 @@ class MacaoAgent:
             epsilon = self.eps_scheduler.get_value(step=self.total_steps)
 
             batch = [current_state]
-            self.flip = random.choice([1, 2])
             actions = self.get_action(batch, epsilon)
             current_action, current_extra_info = actions[0]
 
@@ -329,19 +318,14 @@ class MacaoAgent:
         batch_nexts = [x[3] for x in train_batch]
         batch_dones = torch.as_tensor([x[4] for x in train_batch])
 
-        if self.flip == 1:
-            self.q1.eval()
-            # use q1 for next state computations
-            q_hat = self.q1(batch_nexts)
-        else:
-            self.q2.eval()
-            # use q2 for next state computations
-            q_hat = self.q2(batch_nexts)
-
-        q_hat_sorted = torch.argsort(q_hat, dim=1)
-        actions_as_idx_batch = [None] * len(q_hat_sorted)
+        self.q_target.eval()
+        self.optim.zero_grad()
+        with torch.inference_mode():
+            q_next_states_target = self.q_target(batch_nexts)
+        q_next_sorted = torch.argsort(q_next_states_target, dim=1)
+        actions_as_idx_batch = [None] * len(q_next_sorted)
         # execution bottleneck
-        for idx, actions_as_idx_state in enumerate(q_hat_sorted):
+        for idx, actions_as_idx_state in enumerate(q_next_sorted):
             for action_idx in reversed(actions_as_idx_state):
                 action, extra_info = self.idx_to_action(action_idx)
                 if self.check_legal_action(batch_states[idx], action, extra_info):
@@ -349,20 +333,13 @@ class MacaoAgent:
                     break
         actions_as_idx_batch = torch.as_tensor(actions_as_idx_batch)
         actions_as_idx_batch = F.one_hot(actions_as_idx_batch, num_classes=NUM_ACTIONS)
-        target_q = actions_as_idx_batch * q_hat.cpu()
+        target_q = actions_as_idx_batch * q_next_states_target.cpu()
         target_q = torch.sum(target_q, dim=1)
         # compute target q
         target_q = batch_rewards + (1 - batch_dones) * self.gamma * target_q
 
-        if self.flip == 1:
-            self.q2.train()
-            q_states = self.q2(batch_states)
-            optim = self.optim2
-        else:
-            self.q1.train()
-            q_states = self.q1(batch_states)
-            optim = self.optim1
-
+        self.q.train()
+        q_states = self.q(batch_states)
         batch_actions = F.one_hot(batch_actions, num_classes=NUM_ACTIONS)
         predicted_q = batch_actions * q_states.cpu()
         predicted_q = torch.sum(predicted_q, dim=1)
@@ -371,8 +348,11 @@ class MacaoAgent:
         loss = F.huber_loss(input=predicted_q, target=target_q)
         loss.backward()
         # Update weights
-        optim.step()
-        optim.zero_grad()
+        self.optim.step()
+
+        # q_target weights update
+        for target_param, param in zip(self.q_target.parameters(), self.q.parameters()):
+            target_param.data.copy_(self.tau * param - (1 - self.tau) * target_param)
         return loss
 
     def train(self, max_episodes: int):
@@ -389,10 +369,11 @@ class MacaoAgent:
                 print(f"Epsiode {e}.")
                 print(f"Reward is {ep_reward}.")
                 print(f"Loss is {avg_loss}.")
+                print(f"Eps is {self.eps_scheduler.get_value(step=self.total_steps)}")
                 print(f"Avg reward so far is {sum(episodes_rewards)/len(episodes_rewards)}.")
                 print(f"Avg loss so far is {sum(avg_losses)/len(avg_losses)}.")
-                torch.save(self.q1.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_{e}_newstate.model")
-                torch.save(self.q2.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_{e}_newstate.model")
+                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_{e}_newstate_betrewards.model")
+                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_{e}_newstate_betrewards.model")
 
     def make_state_readable(self, state):
         hand, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suits, pass_flag = state
@@ -426,8 +407,8 @@ class MacaoAgent:
 
     @torch.inference_mode()
     def run_regular_episode(self):
-        self.q1.eval()
-        self.q2.eval()
+        self.q.eval()
+        self.q_target.eval()
         """
         Run a single training episode
         """
@@ -439,52 +420,67 @@ class MacaoAgent:
         total_loss = 0
         num_loss_comp = 0
         epsilon = 1.0
-
+        old_reward = None
+        reward = None
         for ep_step in range(10 ** 4):
-            self.make_state_readable(current_state)
+            # self.make_state_readable(current_state)
             epsilon = self.eps_scheduler.get_value(step=self.total_steps)
 
             batch = [current_state]
             self.flip = random.choice([1, 2])
             actions = self.get_action(batch, eps=0)
             current_action, current_extra_info = actions[0]
-            print(f"Took action {current_action}, {current_extra_info}.")
-
+            # print(f"Took action {current_action}, {current_extra_info}.")
+            old_reward = ep_reward
             new_state, reward, done = self.step_random(current_action, current_extra_info)
             new_state_proc = self.process_state(new_state)
             ep_reward += reward
-            print(f"Got reward {reward}., total reward {ep_reward}")
-            print("-"*50)
+            # print(f"Got reward {reward}., total reward {ep_reward}")
+            # print("-"*50)
 
             current_state = new_state_proc
             self.total_steps += 1
 
             if done:
+                if old_reward is not None and ep_reward - old_reward >= 70:
+                    done = 1
+                else:
+                    done = -1
                 break
         avg_loss = (total_loss/num_loss_comp if num_loss_comp else 0)
-        print(f"Full reward is {ep_reward}.")
-        return ep_reward, avg_loss, epsilon
+        # print(f"Full reward is {ep_reward}.")
+        return ep_reward, avg_loss, epsilon, done
 
-    def get_statistics(self):
-        total_rewards = []
-        for i in trange(10 ** 2):
-            reward, *_ = self.run_regular_episode()
-            total_rewards.append(reward)
-        print(f"Average reward is {sum(total_rewards)/len(total_rewards)}")
+    def get_statistics(self, num_iters: int=10**2):
+        wins = 0
+        for i in trange(num_iters):
+            reward, *_, win = self.run_regular_episode()
+            wins += 1 if win == 1 else 0
+        print(f"Average reward is {wins/num_iters*100}")
 
     def save_models(self):
-        torch.save(self.q1.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_newstate.model")
-        torch.save(self.q2.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_newstate.model")
+        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_newstate_betrewards.model")
+        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_newstate_betrewards.model")
 
+
+def get_macao_agent(env):
+    agent = MacaoAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-3, pre_train_steps=300,
+                             eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.1, pre_train_steps=300,
+                                                                 final_eps_step=10 ** 5))
+    agent.q.load_state_dict(
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_newstate_betrewards.model"))
+    agent.q_target.load_state_dict(
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_newstate_betrewards.model"))
+    return agent
 
 if __name__ == "__main__":
     env = MacaoEnv()
 
-    macao_agent = MacaoAgent(env=env, gamma=1, batch_size=64, replay_buff_size=128, lr=1e-3, pre_train_steps=300,
+    macao_agent = MacaoAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-3, pre_train_steps=300,
                              eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.1, pre_train_steps=300,
-                                                                 final_eps_step=10 ** 3))
-    macao_agent.q1.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_1780_newstate.model"))
-    macao_agent.q2.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_1780_newstate.model"))
-    macao_agent.run_regular_episode()
+                                                                 final_eps_step=10 ** 5))
+    macao_agent.q.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_newstate_betrewards.model"))
+    macao_agent.q_target.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_newstate_betrewards.model"))
+    macao_agent.get_statistics(num_iters=10**3)
     # macao_agent.train(max_episodes=10**4)
     # macao_agent.save_models()

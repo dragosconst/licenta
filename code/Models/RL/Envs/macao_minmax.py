@@ -236,6 +236,10 @@ def alpha_beta(alpha: int=-500, beta: int=500, state: State=None):
 
     state.possible_moves = state.moves()
     if len(state.possible_moves) == 0:
+        print(state.game_state.player_hand)
+        print(state.game_state.adversary_hand)
+        print(state.game_state.cards_pot)
+        print(state.game_state.deck)
         print("????")
 
     if state.current_player == Game.MAXP:
