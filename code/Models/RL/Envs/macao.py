@@ -138,7 +138,7 @@ class MacaoEnv(gym.Env):
                     copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.drawing_contest, self.turns_contest,
                     copy.deepcopy(self.player_turns_to_wait), copy.deepcopy(self.adversary_turns_to_wait),
                     copy.deepcopy(self.np_random), 0)
-        return State(game_state=game, current_player=Game.MAXP, depth=2)  # run min-max for 2 moves at first
+        return State(game_state=game, current_player=Game.MAXP, depth=1)  # run min-max for 2 moves at first
 
     def final_state(self):
         """
@@ -146,7 +146,7 @@ class MacaoEnv(gym.Env):
         """
         if not self.has_to_wait() and not self.has_to_draw() and len(self.player_hand) == 0:
             return 10 ** 2
-        if len(self.adversary_hand) == 0:
+        if len(self.adversary_hand) == 0 and not self.has_to_draw() and not self.has_to_wait():
             for card in self.player_hand:
                 # check if player could potentially keep the game alive
                 if (card[0] in {"2", "3", "5"} or card[:3] == "jok") and self.has_to_draw():
@@ -171,8 +171,6 @@ class MacaoEnv(gym.Env):
 
     def action_processing(self, action, extra_info=None):
         assert action is None or self.action_space.contains(action)
-        if self.player_turns_to_wait > 0:
-            self.player_turns_to_wait -= 1
         reward = 0
         if action == 0:
             # put down card
@@ -218,6 +216,8 @@ class MacaoEnv(gym.Env):
                     reward += 1
         elif action == 5:
             assert self.player_turns_to_wait > 0
+        if self.player_turns_to_wait > 0:
+            self.player_turns_to_wait -= 1
         return reward
 
     def step(self, action, extra_info=None):
@@ -285,6 +285,7 @@ class MacaoEnv(gym.Env):
 
         if not done:
             agent = ma.get_macao_agent(self)
+            # agent = None
             action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
             action, extra_info = action
             assert action is None or self.action_space.contains(action)
@@ -343,10 +344,10 @@ class MacaoEnv(gym.Env):
         done = 1 if final != 0 else 0
 
         return self._get_obs(), reward + final, done
-
     def render(self, mode="human"):
         print(f"Your hand is {self.player_hand}.")
         print(f"Dealer has {len(self.adversary_hand)} more cards.")
+        # print(f"Dealer has {self.adversary_hand} more cards.")
         print(f"Suits is {self.suite}")
         print(f"Turns left is {self.player_turns_to_wait}")
         # print(f"Dealer hand is {self.adversary_hand}.")

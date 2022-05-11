@@ -74,7 +74,7 @@ same_ph_in_a_row = 0
 same_cp_in_a_row = 0
 last_player_hand = []
 last_card_pot = []
-DET_ROW_THRES = 4
+DET_ROW_THRES = 2
 cards_pot = []
 cards_pot_labels = []
 player_hand = []
@@ -155,7 +155,7 @@ def _capture_camera(sender, app_data, user_data):
 
 @torch.inference_mode()
 def update_screen_area(model: torch.nn.Module):
-    global last_camera_update, UPDATE_DETECTIONS_RATE, dets
+    global last_camera_update, UPDATE_DETECTIONS_RATE, dets, cards_pot, player_hand, img_normalized
 
     if not dpg.does_item_exist(DIM_W) or not dpg.is_item_visible(DIM_W):
         return
@@ -179,35 +179,44 @@ def update_screen_area(model: torch.nn.Module):
         detections = model(img_tensor.unsqueeze(0))
         dets = detections[0]
         apply_inplace_filters(dets)
+        cards_pot, player_hand = get_player_hand(current_game, dets)
+        cards_pot, player_hand = filter_same_card(dets, cards_pot, player_hand)
+        check_if_change_detections(dets)
 
-    img_pil = draw_detection(T.ToPILImage()(img_tensor), dets)
-    img_pil = img_pil.resize(shape[::-1])
-    img[:, :, :3] = np.asarray(img_pil)
-    img = cv.resize(img, (SC_STDW, SC_STDH))
+    img_pil = draw_detection(T.ToPILImage()(img_tensor), dets, cards_pot, player_hand)
+    img_pil = img_pil.resize((min(dpg.get_viewport_width(), FRCNN_W), min(dpg.get_viewport_height(), FRCNN_H)))
+    # img_pil = img_pil.resize(shape[::-1])
+    img[:dpg.get_viewport_height(), :dpg.get_viewport_width(), :3] = np.asarray(img_pil)
+    # img_pil = img_pil.resize(shape[::-1])
+    # img[:, :, :3] = np.asarray(img_pil)
+    # img = cv.resize(img, (SC_STDW, SC_STDH))
     img = img.flatten().astype(np.float32)
     img_normalized = img / 255
     dpg.set_value(SC_C, img_normalized)
 
 
 def _get_screen_area():
+    global img_normalized
+
     if not dpg.does_item_exist(DIM_W):
-        with dpg.window(tag=DIM_W, label="Dimensions"):
-            dpg.add_slider_int(label="Width", tag=SC_WH, default_value=1900, min_value=100, max_value=2000)
-            dpg.add_slider_int(label="Height", tag=SC_HH, default_value=1080, min_value=100, max_value=2000)
-            dpg.add_slider_int(label="X pos", tag=SC_X, min_value=0, max_value=1900)
-            dpg.add_slider_int(label="Y pos", tag=SC_Y, min_value=0, max_value=1200)
-        with dpg.window(tag=SC_W, label="Screen Capture"):
+        with dpg.window(tag=SC_W, width=FRCNN_W, height=FRCNN_H, label="Screen Capture"):
+            dpg.add_button(label="Restart Agent", tag=CR_PROC_AG_BUT, callback=_restart_agent)
             with dpg.texture_registry(show=False):
-                w = dpg.get_value(SC_WH)
-                h = dpg.get_value(SC_HH)
-                x = dpg.get_value(SC_X)
-                y = dpg.get_value(SC_Y)
+                w = 1900
+                h = 1080
+                x = 0
+                y = 0
                 img = grab_screen_area(x, y, w, h)
                 img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
-                img = cv.resize(img, (SC_STDW, SC_STDH))
+                # img = cv.resize(img, (SC_STDW, SC_STDH))
                 img = img.flatten().astype(np.float32)
                 img_normalized = img / 255
-                dpg.add_raw_texture(SC_STDW, SC_STDH, img_normalized, tag=SC_C, format=dpg.mvFormat_Float_rgba)
+                dpg.add_raw_texture(w, h, img_normalized, tag=SC_C, format=dpg.mvFormat_Float_rgba)
+            with dpg.window(tag=DIM_W, label="Dimensions"):
+                dpg.add_slider_int(label="Width", tag=SC_WH, default_value=1900, min_value=100, max_value=2000)
+                dpg.add_slider_int(label="Height", tag=SC_HH, default_value=1080, min_value=100, max_value=2000)
+                dpg.add_slider_int(label="X pos", tag=SC_X, min_value=0, max_value=1900)
+                dpg.add_slider_int(label="Y pos", tag=SC_Y, min_value=0, max_value=1200)
             dpg.add_image(SC_C)
     else:
         dpg.show_item(DIM_W)
@@ -269,8 +278,8 @@ def update_selected_window(model: torch.nn.Module):
     y = dpg.get_value(CR_PROC_Y)
     img, _ = grab_selected_window_contents(hwnd=selected_window_hwnd, w=w, h=h, x=x, y=y)
     img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
-    img = np.asarray(Image.fromarray(img).resize((FRCNN_W, FRCNN_H))) # resize to net dimensions
     img_tensor = torch.from_numpy(img[:, :, :3])
+    img = np.asarray(Image.fromarray(img).resize((FRCNN_W, FRCNN_H))) # resize to net dimensions
     img_tensor = img_tensor.permute(2, 0, 1)
     shape = img_tensor.size()[1:]
     # img_tensor = torch.from_numpy(np.asarray(T.ToPILImage()(img_tensor).resize((1900, 1080))))
@@ -286,7 +295,6 @@ def update_selected_window(model: torch.nn.Module):
         cards_pot, player_hand = get_player_hand(current_game, dets)
         cards_pot, player_hand = filter_same_card(dets, cards_pot, player_hand)
         check_if_change_detections(dets)
-
 
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets, cards_pot, player_hand)
     img_pil = img_pil.resize((min(dpg.get_viewport_width(), FRCNN_W), min(dpg.get_viewport_height(), FRCNN_H)))
@@ -368,15 +376,19 @@ def update_agent():
     current_game_engine.act()
 
 
+def update_window_names():
+    win_names = grab_all_open_windows()
+    dpg.configure_item(SEL_W, items=win_names)
+
+
 def create_main_window(font):
     with dpg.window(tag=MAIN_WINDOW):
-        dpg.add_button(label="Capture camera", width=MW_W, height=MW_H // 4, callback=_capture_camera)
+        # dpg.add_button(label="Capture camera", width=MW_W, height=MW_H // 4, callback=_capture_camera)
         dpg.add_button(label="Select screen area", width=MW_W, height=MW_H // 4, callback=_get_screen_area)
         win_names = grab_all_open_windows()
         print(win_names)
         dpg.add_combo(label="Select window", tag=SEL_W, items=win_names, width=MW_W // 2,
                       callback=_change_active_window)
-
         dpg.add_combo(label="Select game", items=GAMES, callback=_change_game)
         dpg.add_button(label="Debug mode:ON", width=MW_W, height=MW_H // 4, tag="Debug", callback=_change_debug_text, user_data="Debug")
         dpg.bind_font(font)

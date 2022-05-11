@@ -67,7 +67,7 @@ class BlackjackEngine(BaseEngine):
             self.player_hand = detected_player_hand
             if detected_card_pot != self.dealer_hand:
                 self.dealer_hand = detected_card_pot
-                if self.state != BJStates.WAITING_FOR_DEALER and self.state != BJStates.RESETTING:
+                if self.state != BJStates.WAITING_FOR_DEALER and self.state != BJStates.RESETTING and self.state != BJStates.DECIDING:
                     print(f"Bad value for dealer detected.")
                     print("-"*75)
                     self.state = BJStates.RESETTING
@@ -104,7 +104,7 @@ class BlackjackEngine(BaseEngine):
                 splittable = 10 if self.player_hand[0] in {"K", "Q", "J"} else int(self.player_hand[0])
             sum_player = sum_hand(self.player_hand)
             if len(self.player_hand) == 2 and sum_player == 21: # natural blackjack
-                if self.split_values == 0:
+                if self.splits_left == 0:
                     self.state = BJStates.DECIDING
                 else:
                     print(f"Blackjack - from split. change hand")

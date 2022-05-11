@@ -10,9 +10,7 @@ import torchvision.transforms as T
 import matplotlib.pyplot as plt
 import torchvision.transforms.functional as F
 from torchvision.utils import draw_bounding_boxes
-import torchvision.transforms as transforms
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 
 from Utils.file_utils import get_image_files, get_random_bg_img, get_random_img, load_img_and_xml, MAX_IM_SIZE
 from Utils.trans import RandomAffineBoxSensitive, RandomPerspectiveBoxSensitive, MyCompose, RandomColorJitterBoxSensitive, RandomGaussianNoise
@@ -22,8 +20,8 @@ Generate a dataset of a certain size from a given dataset of cropped cards and a
 
 """
 
-IM_HEIGHT = 1080
-IM_WIDTH = 1900
+IM_HEIGHT = 540
+IM_WIDTH = 950
 SQ_2 = 1.414
 
 def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, Dict[str, torch.Tensor]]:
@@ -39,7 +37,13 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
 
     card_masks = []
     transforms = MyCompose(
-       (RandomGaussianNoise(mean=0., var=0.05, prob=1.),
+       (RandomGaussianNoise(mean=0., var=0.07, prob=0.9),
+        RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
+        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.5, 1.5), prob=0.6),
+        RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3))
+    )
+    transforms_digital = MyCompose(
+       (RandomGaussianNoise(mean=0., var=1e-6, prob=0.9),
         RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
         RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.5, 1.5), prob=0.6),
         RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3))
@@ -68,7 +72,10 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
         data["boxes"] = data["boxes"].float()
         padding = torch.from_numpy(padding)
         padding = padding.permute(2, 0, 1)
-        padding, data = transforms(padding.to("cuda"), data) # apply transforms on cuda
+        if possible_classes["JOKER_red"] in data["labels"]:
+            padding, data = transforms_digital(padding.to("cuda"), data)  # apply transforms on cuda
+        else:
+            padding, data = transforms(padding.to("cuda"), data) # apply transforms on cuda
         padding = padding.cpu()
         padding = padding.permute(1, 2, 0)
 
@@ -592,7 +599,7 @@ def resize_dataset(root_dir: str, dest_dir: str, res_factor: float) -> None:
         write_annotation(dest_dir, str(i), img.size[::-1], data_dict)
 
 if __name__ == "__main__":
-    dataset_statistics("../../data/my_stuff_augm/testing/")
+    # dataset_statistics("../../data/my_stuff_augm/testing/")
     # resize_dataset("../../data/RAW/my-stuff-cropped/", "../../data/RAW/my-stuff-cropped-res/", 0.3)
-    # gen_dataset_handlike_from_dir("../../data/RAW/PNG-cards-1.3/PNG-cards-1.3/", "../../data/my_stuff_augm/testing/", num_datasets=1,
-    #                      prob_datasets=[1.], num_imgs=2* 10 ** 4, start_from=5 * 10 **4)
+    gen_dataset_from_dir("../../data/RAW/my-stuff-cropped-res/", "../../data/my_stuff_augm/lifelike/", num_datasets=2,
+                         prob_datasets=[0.7, 0.3], num_imgs=2* 10 ** 4, start_from=7 * 10 **4)

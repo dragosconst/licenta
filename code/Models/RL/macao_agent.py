@@ -14,6 +14,7 @@ from Models.RL.Envs.macao_utils import build_deck, same_suite
 from Models.RL.macao_agent_utils import LinearScheduleEpsilon, ReplayBuffer
 
 NUM_ACTIONS = 74
+
 class MacaoModel(nn.Module):
     def __init__(self, device: str):
         super(MacaoModel, self).__init__()
@@ -59,6 +60,9 @@ class MacaoModel(nn.Module):
         pass_flag = pass_flag.to(self.device)
 
         hand_proj = self.hand_proj(hand)
+        print("-"*50)
+        print(hand_proj)
+        print("-"*50)
         card_proj = self.pot_proj(card_pot)
 
         result = torch.cat((hand_proj, card_proj, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suites, pass_flag), dim=1)
@@ -67,6 +71,8 @@ class MacaoModel(nn.Module):
         output = self.output_layer(h)
         return output
 
+    def __call__(self, x):
+        return self.forward(x)
 
 class MacaoAgent:
     def __init__(self, env: MacaoEnv, replay_buff_size=100, gamma=0.9, batch_size=512, lr=1e-3, steps_per_dqn=20,
@@ -85,14 +91,12 @@ class MacaoAgent:
 
         self.lr = lr
         self.q = MacaoModel("cpu")
-        self.q.to("cpu")
         # gradient clipping
         for p in self.q.parameters():
             if p.requires_grad:
                 p.register_hook(lambda grad: torch.clamp(grad, -1, 1))
         self.optim = Adam(self.q.parameters(), lr=self.lr)
         self.q_target = MacaoModel("cpu")
-        self.q_target.to("cpu")
         self.tau = tau
         self.batch_size = batch_size
         self.steps_per_dqn = steps_per_dqn
@@ -423,20 +427,20 @@ class MacaoAgent:
         old_reward = None
         reward = None
         for ep_step in range(10 ** 4):
-            # self.make_state_readable(current_state)
+            self.make_state_readable(current_state)
             epsilon = self.eps_scheduler.get_value(step=self.total_steps)
 
             batch = [current_state]
             self.flip = random.choice([1, 2])
             actions = self.get_action(batch, eps=0)
             current_action, current_extra_info = actions[0]
-            # print(f"Took action {current_action}, {current_extra_info}.")
+            print(f"Took action {current_action}, {current_extra_info}.")
             old_reward = ep_reward
-            new_state, reward, done = self.step_random(current_action, current_extra_info)
+            new_state, reward, done = self.step(current_action, current_extra_info)
             new_state_proc = self.process_state(new_state)
             ep_reward += reward
-            # print(f"Got reward {reward}., total reward {ep_reward}")
-            # print("-"*50)
+            print(f"Got reward {reward}., total reward {ep_reward}")
+            print("-"*50)
 
             current_state = new_state_proc
             self.total_steps += 1
@@ -467,6 +471,7 @@ def get_macao_agent(env):
     agent = MacaoAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-3, pre_train_steps=300,
                              eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.1, pre_train_steps=300,
                                                                  final_eps_step=10 ** 5))
+    agent.total_steps = 1000
     agent.q.load_state_dict(
         torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_newstate_betrewards.model"))
     agent.q_target.load_state_dict(
@@ -479,8 +484,9 @@ if __name__ == "__main__":
     macao_agent = MacaoAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-3, pre_train_steps=300,
                              eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.1, pre_train_steps=300,
                                                                  final_eps_step=10 ** 5))
+    macao_agent.total_steps = 1000
     macao_agent.q.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q1_newstate_betrewards.model"))
     macao_agent.q_target.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q2_newstate_betrewards.model"))
-    macao_agent.get_statistics(num_iters=10**3)
+    macao_agent.run_regular_episode()
     # macao_agent.train(max_episodes=10**4)
     # macao_agent.save_models()

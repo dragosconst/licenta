@@ -21,7 +21,8 @@ def get_random_bg_img(imgs_fns) -> Image.Image:
     img = Image.open(imgs_fns[idx])
     return img
 
-MAX_IM_SIZE = 350
+
+MAX_IM_SIZE = 175
 def get_random_img(dir_path: str) -> Tuple[Image.Image, Dict[str, torch.Tensor]]:
     fps = glob.glob(os.path.join(dir_path, "*.jpg"))
     xmls = glob.glob(os.path.join(dir_path, "*.xml"))
