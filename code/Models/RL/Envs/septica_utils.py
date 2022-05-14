@@ -2,8 +2,13 @@ from typing import List, Tuple
 import random
 
 
+def shuffle_deck(deck: List) -> List:
+    random.shuffle(deck)
+    return deck
+
+
 def draw_card(deck: List, np_random) -> Tuple[str, List]:
-    card = np_random.choice(deck)
+    card = deck[-1]
     deck.remove(card)  # in-place
     return card, deck
 

@@ -13,7 +13,7 @@ from tqdm import trange
 
 from Models.RL.Envs.macao import MacaoEnv
 from Models.RL.Envs.macao_utils import build_deck, same_suite
-from Models.RL.macao_agent_utils import LinearScheduleEpsilon, ReplayBuffer
+from Models.RL.rl_agent_utils import LinearScheduleEpsilon, ReplayBuffer
 
 NUM_ACTIONS = 74
 
@@ -68,9 +68,9 @@ class MacaoModel(nn.Module):
         print("-"*50)
         card_proj = self.pot_proj(card_pot)
 
-        result = torch.cat((hand_proj, card_proj, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suites, pass_flag), dim=1)
+        features = torch.cat((hand_proj, card_proj, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suites, pass_flag), dim=1)
 
-        h = self.hidden_layers(result)
+        h = self.hidden_layers(features)
         output = self.output_layer(h)
         return output
 
@@ -129,9 +129,9 @@ class MacaoModelCardPot(nn.Module):
         last_proj = self.last_card_proj(last_card)
         card_proj = self.pot_proj(cards_pot)
 
-        result = torch.cat((hand_proj, last_proj, card_proj, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suites, pass_flag), dim=1)
+        features = torch.cat((hand_proj, last_proj, card_proj, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suites, pass_flag), dim=1)
 
-        h = self.hidden_layers(result)
+        h = self.hidden_layers(features)
         output = self.output_layer(h)
         return output
 

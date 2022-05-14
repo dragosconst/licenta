@@ -4,7 +4,7 @@ import gym
 from gym import spaces
 from gym.utils import seeding
 
-from Models.RL.Envs.septica_utils import draw_card, draw_hand, build_deck, play_value, draw_until
+from Models.RL.Envs.septica_utils import draw_card, draw_hand, build_deck, play_value, draw_until, shuffle_deck
 from Models.RL.Envs.septica_minmax import SepticaMinmax, alpha_beta, SepticaState
 
 
@@ -80,7 +80,7 @@ class SepticaEnv(gym.Env):
     def _get_obs(self):
         return self.player_hand, self.played_cards[0] if len(self.played_cards) > 0 else None, \
                self.played_cards + self.used_cards, play_value(self.played_cards), \
-               self.is_first_player, self.is_winning()
+               self.is_first_player, self.is_challenging
 
     def check_legal_put(self, card):
         if not self.is_challenging:
@@ -107,9 +107,9 @@ class SepticaEnv(gym.Env):
             assert extra_info is not None
             card = extra_info
             assert self.check_legal_put(card)
+            self.is_challenging = self.check_start_challenge(card)
             self.player_hand.remove(card)
             self.played_cards.append(card)
-            self.is_challenging = self.check_start_challenge(card)
         elif action == 1:
             assert len(self.played_cards) > 0  # can't end hand before playing
             # end hand
@@ -153,7 +153,7 @@ class SepticaEnv(gym.Env):
         return self._get_obs(), reward, done
 
     def reset(self):
-        self.deck = build_deck()
+        self.deck = shuffle_deck(build_deck())
         self.player_hand, self.deck = draw_hand(self.deck, self.np_random)
         self.adversary_hand, self.deck = draw_hand(self.deck, self.np_random)
         self.played_cards = []  # the player always begins the match
