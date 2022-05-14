@@ -23,7 +23,7 @@ class SepticaMinmax():
     def check_legal_put(self, card, player):
         if not self.is_challenging:
             # when there's no challenge going on, any card goes
-            return not self.first_player == player or (self.first_player == player and len(self.played_cards) == 0)
+            return self.first_player != player or (self.first_player == player and len(self.played_cards) == 0)
         if not self.first_player == player:
             # when there's a challenge going on, every player but the first player can put down anything
             return True
@@ -48,7 +48,7 @@ class SepticaMinmax():
                     new_hand = [card_ for card_ in self.adversary_hand if card_ != card]
                     all_moves.append(SepticaMinmax(copy.deepcopy(self.player_hand), new_hand, self.played_cards + [card],
                                                    copy.deepcopy(self.deck), self.card_is_challenge(card), self.first_player,
-                                                   self.player_score, self.adversary_score, self.np_random, self.reward))
+                                                   self.player_score, self.adversary_score, copy.deepcopy(self.np_random), self.reward))
             if self.check_legal_end(player):
                 # means first player is MAXP
                 new_player_score = self.player_score
@@ -61,18 +61,20 @@ class SepticaMinmax():
                     self.reward += play_value(self.played_cards)
                 new_player_hand = copy.deepcopy(self.player_hand)
                 new_adversary_hand = copy.deepcopy(self.adversary_hand)
+                new_deck = copy.deepcopy(self.deck)
+                new_np_random = copy.deepcopy(self.np_random)
                 if len(self.deck) > 0:
-                    new_player_hand, new_adversary_hand, self.deck = draw_until(self.deck, self.player_hand, self.adversary_hand, 4, self.np_random)
-                all_moves.append(SepticaMinmax(new_player_hand, new_adversary_hand, [], copy.deepcopy(self.deck), False,
-                                               self.next_player(), new_player_score, new_adversary_score, self.np_random,
+                    new_player_hand, new_adversary_hand, new_deck = draw_until(copy.deepcopy(self.deck), new_player_hand, new_adversary_hand, 4, new_np_random)
+                all_moves.append(SepticaMinmax(new_player_hand, new_adversary_hand, [], new_deck, False,
+                                               self.next_player(), new_player_score, new_adversary_score, copy.deepcopy(new_np_random),
                                                self.reward))
         else:
             for card in self.player_hand:
                 if self.check_legal_put(card, player):
-                    new_hand = [card_ for card_ in self.adversary_hand if card_ != card]
+                    new_hand = [card_ for card_ in self.player_hand if card_ != card]
                     all_moves.append(SepticaMinmax(new_hand, copy.deepcopy(self.adversary_hand), self.played_cards + [card],
                                                    copy.deepcopy(self.deck), self.card_is_challenge(card), self.first_player,
-                                                   self.player_score, self.adversary_score, self.np_random, self.reward))
+                                                   self.player_score, self.adversary_score, copy.deepcopy(self.np_random), self.reward))
             if self.check_legal_end(player):
                 # means first player is MINP
                 new_player_score = self.player_score
@@ -85,10 +87,12 @@ class SepticaMinmax():
                     self.reward -= play_value(self.played_cards)
                 new_player_hand = copy.deepcopy(self.player_hand)
                 new_adversary_hand = copy.deepcopy(self.adversary_hand)
+                new_deck = copy.deepcopy(self.deck)
+                new_np_random = copy.deepcopy(self.np_random)
                 if len(self.deck) > 0:
-                    new_player_hand, new_adversary_hand, self.deck = draw_until(self.deck, self.player_hand, self.adversary_hand, 4, self.np_random)
-                all_moves.append(SepticaMinmax(new_player_hand, new_adversary_hand, [], copy.deepcopy(self.deck), False,
-                                               self.next_player(), new_player_score, new_adversary_score, self.np_random,
+                    new_player_hand, new_adversary_hand, new_deck = draw_until(copy.deepcopy(self.deck), new_player_hand, new_adversary_hand, 4, new_np_random)
+                all_moves.append(SepticaMinmax(new_player_hand, new_adversary_hand, [], new_deck, False,
+                                               self.next_player(), new_player_score, new_adversary_score, copy.deepcopy(new_np_random),
                                                self.reward))
         return all_moves
 
@@ -96,11 +100,11 @@ class SepticaMinmax():
         return len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.adversary_hand) == 0 and len(self.played_cards) == 0
 
     def is_winning_hand(self, player):
-        current_winning = self.is_challenging or len(self.played_cards) == 0
-        return not (current_winning ^ (player == self.MAXP))
+        older_winning = self.is_challenging or len(self.played_cards) == 1
+        return older_winning ^ (player != self.MAXP)
 
     def calculate_score(self, depth, player):
-        return self.adversary_score - self.player_score + play_value(self.played_cards) * (1 if self.is_winning_hand(player) else -1)
+        return self.adversary_score - self.player_score
 
     @classmethod
     def adv_player(cls, player):

@@ -97,8 +97,8 @@ class SepticaEnv(gym.Env):
     def build_state_from_env(self):
         game = SepticaMinmax(deepc(self.player_hand), deepc(self.adversary_hand), deepc(self.played_cards), deepc(self.deck),
                              self.is_challenging, SepticaMinmax.MINP if self.is_first_player else SepticaMinmax.MAXP,
-                             self.player_points, self.adversary_points, self.np_random, 0)
-        return SepticaState(game_state=game, current_player=SepticaMinmax.MAXP, depth=3)
+                             self.player_points, self.adversary_points, copy.deepcopy(self.np_random), 0)
+        return SepticaState(game_state=game, current_player=SepticaMinmax.MAXP, depth=4)
 
     def step(self, action, extra_info=None):
         reward = 0
@@ -133,6 +133,7 @@ class SepticaEnv(gym.Env):
         # adversary stuff
         if not done:
             next_state = alpha_beta(state=self.build_state_from_env()).best_next_state
+            print(f"score is {next_state.score}")
             game_state = next_state.game_state  # type: SepticaMinmax
             self.player_hand = game_state.player_hand
             self.adversary_hand = game_state.adversary_hand
@@ -165,7 +166,7 @@ class SepticaEnv(gym.Env):
 
     def render(self, mode="human"):
         print(f"Your hand is {self.player_hand}.")
-        # print(f"Adversary has {len(self.adversary_hand)} more cards.")
+        print(f"Adversary has {len(self.adversary_hand)} more cards.")
         print(f"Dealer has {self.adversary_hand} cards.")
         print(f"Cards down are {self.played_cards}.")
         print(f"Your score is {self.player_points}.")
