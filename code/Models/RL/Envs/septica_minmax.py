@@ -26,7 +26,7 @@ class SepticaMinmax():
             return self.first_player != player or (self.first_player == player and len(self.played_cards) == 0)
         if not self.first_player == player:
             # when there's a challenge going on, every player but the first player can put down anything
-            return True
+            return len(self.played_cards) > 0
         return card[0] == "7" or card[0] == self.played_cards[0][0]
 
     def card_is_challenge(self, card):
@@ -38,7 +38,7 @@ class SepticaMinmax():
         return player == self.first_player and len(self.played_cards) > 0
 
     def next_player(self):
-        return self.MAXP if self.first_player == self.MINP else self.MINP
+        return (self.first_player + 1) % 2
 
     def moves(self, player: int):
         all_moves = []
@@ -46,7 +46,8 @@ class SepticaMinmax():
             for card in self.adversary_hand:
                 if self.check_legal_put(card, player):
                     new_hand = [card_ for card_ in self.adversary_hand if card_ != card]
-                    all_moves.append(SepticaMinmax(copy.deepcopy(self.player_hand), new_hand, self.played_cards + [card],
+                    new_played_cards = self.played_cards + [card]
+                    all_moves.append(SepticaMinmax(copy.deepcopy(self.player_hand), copy.deepcopy(new_hand), new_played_cards,
                                                    copy.deepcopy(self.deck), self.card_is_challenge(card), self.first_player,
                                                    self.player_score, self.adversary_score, copy.deepcopy(self.np_random), self.reward))
             if self.check_legal_end(player):
@@ -55,24 +56,27 @@ class SepticaMinmax():
                 new_adversary_score = self.adversary_score
                 if not self.is_challenging:
                     new_adversary_score = self.adversary_score + play_value(self.played_cards)
-                    self.reward -= play_value(self.played_cards)
+                    add_reward = -play_value(self.played_cards)
                 else:
                     new_player_score = self.player_score + play_value(self.played_cards)
-                    self.reward += play_value(self.played_cards)
+                    add_reward = play_value(self.played_cards)
                 new_player_hand = copy.deepcopy(self.player_hand)
                 new_adversary_hand = copy.deepcopy(self.adversary_hand)
                 new_deck = copy.deepcopy(self.deck)
                 new_np_random = copy.deepcopy(self.np_random)
                 if len(self.deck) > 0:
-                    new_player_hand, new_adversary_hand, new_deck = draw_until(copy.deepcopy(self.deck), new_player_hand, new_adversary_hand, 4, new_np_random)
+                    if len(new_adversary_hand) != len(new_player_hand):
+                        print("aefewgfewg32WF32")
+                    new_player_hand, new_adversary_hand, new_deck = draw_until(new_deck, new_player_hand, new_adversary_hand, 4, new_np_random)
                 all_moves.append(SepticaMinmax(new_player_hand, new_adversary_hand, [], new_deck, False,
                                                self.next_player(), new_player_score, new_adversary_score, copy.deepcopy(new_np_random),
-                                               self.reward))
+                                               self.reward + add_reward))
         else:
             for card in self.player_hand:
                 if self.check_legal_put(card, player):
                     new_hand = [card_ for card_ in self.player_hand if card_ != card]
-                    all_moves.append(SepticaMinmax(new_hand, copy.deepcopy(self.adversary_hand), self.played_cards + [card],
+                    new_played_cards = self.played_cards + [card]
+                    all_moves.append(SepticaMinmax(copy.deepcopy(new_hand), copy.deepcopy(self.adversary_hand), new_played_cards,
                                                    copy.deepcopy(self.deck), self.card_is_challenge(card), self.first_player,
                                                    self.player_score, self.adversary_score, copy.deepcopy(self.np_random), self.reward))
             if self.check_legal_end(player):
@@ -81,19 +85,21 @@ class SepticaMinmax():
                 new_adversary_score = self.adversary_score
                 if not self.is_challenging:
                     new_player_score = self.player_score + play_value(self.played_cards)
-                    self.reward += play_value(self.played_cards)
+                    add_reward = play_value(self.played_cards)
                 else:
                     new_adversary_score = self.adversary_score + play_value(self.played_cards)
-                    self.reward -= play_value(self.played_cards)
+                    add_reward = -play_value(self.played_cards)
                 new_player_hand = copy.deepcopy(self.player_hand)
                 new_adversary_hand = copy.deepcopy(self.adversary_hand)
                 new_deck = copy.deepcopy(self.deck)
                 new_np_random = copy.deepcopy(self.np_random)
                 if len(self.deck) > 0:
-                    new_player_hand, new_adversary_hand, new_deck = draw_until(copy.deepcopy(self.deck), new_player_hand, new_adversary_hand, 4, new_np_random)
+                    if len(new_adversary_hand) != len(new_player_hand):
+                        print("saffwt13q")
+                    new_player_hand, new_adversary_hand, new_deck = draw_until(new_deck, new_player_hand, new_adversary_hand, 4, new_np_random)
                 all_moves.append(SepticaMinmax(new_player_hand, new_adversary_hand, [], new_deck, False,
                                                self.next_player(), new_player_score, new_adversary_score, copy.deepcopy(new_np_random),
-                                               self.reward))
+                                               self.reward + add_reward))
         return all_moves
 
     def final_state(self):
@@ -108,7 +114,7 @@ class SepticaMinmax():
 
     @classmethod
     def adv_player(cls, player):
-        return cls.MAXP if player == cls.MINP else cls.MINP
+        return (player + 1) % 2
 
 
 class SepticaState:

@@ -22,6 +22,7 @@ def draw_hand(deck: List[str], np_random) -> Tuple[List[str], ...]:
 
 
 def draw_until(deck: List, hand1: List, hand2: List, until: int, np_random) -> Tuple:
+    assert len(hand1) == len(hand2)
     while len(hand1) < until and len(deck) > 0:
         card1, deck = draw_card(deck, np_random)
         card2, deck = draw_card(deck, np_random)

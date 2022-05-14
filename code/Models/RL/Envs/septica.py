@@ -59,7 +59,7 @@ class SepticaEnv(gym.Env):
         self.player_hand = []
         self.adversary_hand = []
         self.played_cards = []
-        self.used_cards = []
+        self.used_cards = set()
         self.is_first_player = True
         self.is_challenging = False
 
@@ -79,14 +79,14 @@ class SepticaEnv(gym.Env):
 
     def _get_obs(self):
         return self.player_hand, self.played_cards[0] if len(self.played_cards) > 0 else None, \
-               self.played_cards + self.used_cards, play_value(self.played_cards), \
+               self.used_cards, play_value(self.played_cards), \
                self.is_first_player, self.is_challenging
 
     def check_legal_put(self, card):
         if not self.is_challenging:
             # when there's no challenge going on, any card goes
             return not self.is_first_player or (self.is_first_player and len(self.played_cards) == 0)
-        if not self.is_first_player:
+        if not self.is_first_player and len(self.played_cards) > 0:
             # when there's a challenge going on, every player but the first player can put down anything
             return True
         return card[0] == "7" or card[0] == self.played_cards[0][0]
@@ -96,8 +96,8 @@ class SepticaEnv(gym.Env):
 
     def build_state_from_env(self):
         game = SepticaMinmax(deepc(self.player_hand), deepc(self.adversary_hand), deepc(self.played_cards), deepc(self.deck),
-                             self.is_challenging, SepticaMinmax.MINP if self.is_first_player else SepticaMinmax.MAXP,
-                             self.player_points, self.adversary_points, copy.deepcopy(self.np_random), 0)
+                             self.is_challenging, int(not self.is_first_player),
+                             self.player_points, self.adversary_points, deepc(self.np_random), 0)
         return SepticaState(game_state=game, current_player=SepticaMinmax.MAXP, depth=4)
 
     def step(self, action, extra_info=None):
@@ -119,7 +119,7 @@ class SepticaEnv(gym.Env):
             else:
                 self.player_points += play_value(self.played_cards)
                 reward += play_value(self.played_cards)
-            self.used_cards.extend(self.played_cards)
+            self.used_cards.update(self.played_cards)
             self.played_cards = []
             if len(self.deck) > 0:
                 self.player_hand, self.adversary_hand, self.deck = draw_until(self.deck, self.player_hand, self.adversary_hand, 4, self.np_random)
@@ -133,18 +133,17 @@ class SepticaEnv(gym.Env):
         # adversary stuff
         if not done:
             next_state = alpha_beta(state=self.build_state_from_env()).best_next_state
-            print(f"score is {next_state.score}")
             game_state = next_state.game_state  # type: SepticaMinmax
             self.player_hand = game_state.player_hand
             self.adversary_hand = game_state.adversary_hand
-            if len(game_state.adversary_hand) == 0:
-                self.used_cards.extend(self.played_cards)
+            self.used_cards.update(game_state.played_cards)
             self.played_cards = game_state.played_cards
             self.deck = game_state.deck
             self.player_points = game_state.player_score
             self.adversary_points = game_state.adversary_score
             self.is_challenging = game_state.is_challenging
             self.is_first_player = game_state.first_player == SepticaMinmax.MINP
+            reward += game_state.reward
 
         done = 0
         if len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:
@@ -157,8 +156,9 @@ class SepticaEnv(gym.Env):
         self.player_hand, self.deck = draw_hand(self.deck, self.np_random)
         self.adversary_hand, self.deck = draw_hand(self.deck, self.np_random)
         self.played_cards = []  # the player always begins the match
-        self.used_cards = []
+        self.used_cards = set()
         self.is_challenging = False
+        self.is_first_player = True
 
         self.player_points = 0
         self.adversary_points = 0
