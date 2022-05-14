@@ -1,6 +1,7 @@
 import collections
 import random
 
+
 # it's literally just a deque with a max size and specialized sampling function
 class ReplayBuffer:
     def __init__(self, buffer_size):
@@ -30,7 +31,6 @@ class LinearScheduleEpsilon():
         self.pre_train_steps = pre_train_steps
         self.final_eps_step = final_eps_step
         self.decay_per_step = (self.start_eps - self.final_eps) / (self.final_eps_step - self.pre_train_steps)
-
 
     def get_value(self, step):
         if step <= self.pre_train_steps:

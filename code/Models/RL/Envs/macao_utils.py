@@ -34,6 +34,7 @@ def check_if_deck_empty(deck: List, cards_pot: List) -> Tuple[List, List]:
     cards_pot = [cards_pot[-1]]
     return deck, cards_pot
 
+
 def draw_hand(deck: List[str], np_random) -> Tuple[List[str], ...]:
     hand = []
     for i in range(5):
@@ -59,6 +60,7 @@ def build_deck() -> List:
 def shuffle_deck(deck: List) -> List:
     random.shuffle(deck)
     return deck
+
 
 def get_last_5_cards(cards_pot: List) -> List:
     last_5 = cards_pot[-5:]

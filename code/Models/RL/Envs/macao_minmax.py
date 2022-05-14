@@ -4,7 +4,8 @@ import copy
 from Models.RL.Envs.macao_utils import build_deck, draw_cards, draw_card, draw_hand,get_last_5_cards, get_card_suite, same_suite, shuffle_deck,\
                                         check_if_deck_empty
 
-class Game:
+
+class MacaoMinmax:
     MINP = 0
     MAXP = 1
 
@@ -95,14 +96,14 @@ class Game:
             for card in self.adversary_hand:
                 if self.check_legal_put(card) and self.adv_turns == 0:
                     new_adv_hand = [card_ for card_ in self.adversary_hand if card_ != card]
-                    all_moves.append(Game(self.player_hand, new_adv_hand, copy.deepcopy(self.cards_pot + [card]), copy.deepcopy(self.deck),
-                                          get_card_suite(card), self.drawing_contest + self.process_draws(card),
-                                          self.turns_contest + self.process_turns(card), self.player_turns, self.adv_turns, self.np_random, self.reward - 1))
+                    all_moves.append(MacaoMinmax(self.player_hand, new_adv_hand, copy.deepcopy(self.cards_pot + [card]), copy.deepcopy(self.deck),
+                                                 get_card_suite(card), self.drawing_contest + self.process_draws(card),
+                                                 self.turns_contest + self.process_turns(card), self.player_turns, self.adv_turns, self.np_random, self.reward - 1))
                 elif self.check_legal_switch(card) and self.adv_turns == 0:
                     new_adv_hand = [card_ for card_ in self.adversary_hand if card_ != card]
                     for suite in ["h", "c", "d", "s"]:
-                        all_moves.append(Game(self.player_hand, new_adv_hand, copy.deepcopy(self.cards_pot + [card]), copy.deepcopy(self.deck),
-                                          [suite], self.drawing_contest, self.turns_contest, self.player_turns, self.adv_turns, self.np_random, self.reward - 1))
+                        all_moves.append(MacaoMinmax(self.player_hand, new_adv_hand, copy.deepcopy(self.cards_pot + [card]), copy.deepcopy(self.deck),
+                                                     [suite], self.drawing_contest, self.turns_contest, self.player_turns, self.adv_turns, self.np_random, self.reward - 1))
 
             if self.check_legal_pass() and self.adv_turns == 0:
                 new_deck = copy.deepcopy(self.deck)
@@ -112,9 +113,9 @@ class Game:
                 new_adv_hand = self.adversary_hand + [new_card]
                 if self.adv_turns > 0:
                     self.adv_turns -= 1
-                all_moves.append(Game(copy.deepcopy(self.player_hand), new_adv_hand, copy.deepcopy(new_cards_pot), copy.deepcopy(new_deck),
-                                      copy.deepcopy(self.suite), self.drawing_contest, self.turns_contest, self.player_turns, self.adv_turns, self.np_random,
-                                      self.reward + 1))
+                all_moves.append(MacaoMinmax(copy.deepcopy(self.player_hand), new_adv_hand, copy.deepcopy(new_cards_pot), copy.deepcopy(new_deck),
+                                             copy.deepcopy(self.suite), self.drawing_contest, self.turns_contest, self.player_turns, self.adv_turns, self.np_random,
+                                             self.reward + 1))
             if self.check_legal_concede():
                 cards_to_draw = self.drawing_contest
                 new_deck = copy.deepcopy(self.deck)
@@ -124,32 +125,32 @@ class Game:
                 new_adv_hand = self.adversary_hand + new_cards
                 if self.adv_turns > 0:
                     self.adv_turns -= 1
-                all_moves.append(Game(copy.deepcopy(self.player_hand), new_adv_hand, copy.deepcopy(new_cards_pot),
-                                      copy.deepcopy(new_deck), copy.deepcopy(self.suite), 0, self.turns_contest, self.player_turns,
-                                      self.adv_turns, self.np_random, self.reward + cards_to_draw))
+                all_moves.append(MacaoMinmax(copy.deepcopy(self.player_hand), new_adv_hand, copy.deepcopy(new_cards_pot),
+                                             copy.deepcopy(new_deck), copy.deepcopy(self.suite), 0, self.turns_contest, self.player_turns,
+                                             self.adv_turns, self.np_random, self.reward + cards_to_draw))
             elif self.check_legal_wait():
                 turns_to_wait = self.adv_turns + self.turns_contest
                 adv_turns_to_wait = turns_to_wait
-                all_moves.append(Game(copy.deepcopy(self.player_hand), copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot),
-                                      copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.drawing_contest, 0,
-                                      self.player_turns, adv_turns_to_wait, self.np_random, self.reward + turns_to_wait))
+                all_moves.append(MacaoMinmax(copy.deepcopy(self.player_hand), copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot),
+                                             copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.drawing_contest, 0,
+                                             self.player_turns, adv_turns_to_wait - 1, self.np_random, self.reward + turns_to_wait))
             if self.adv_turns > 0 and not self.check_legal_wait() and not self.check_legal_concede():
-                all_moves.append(Game(copy.deepcopy(self.player_hand), copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot),
-                                      copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.drawing_contest, self.turns_contest,
-                                      self.player_turns, self.adv_turns - 1, self.np_random, self.reward))
+                all_moves.append(MacaoMinmax(copy.deepcopy(self.player_hand), copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot),
+                                             copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.drawing_contest, self.turns_contest,
+                                             self.player_turns, self.adv_turns - 1, self.np_random, self.reward))
         elif player == self.MINP:
             for card in self.player_hand:
                 if self.check_legal_put(card) and self.player_turns == 0:
                     new_player_hand = [card_ for card_ in self.player_hand if card_ != card]
-                    all_moves.append(Game(new_player_hand, copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot + [card]), copy.deepcopy(self.deck),
-                                          get_card_suite(card), self.drawing_contest + self.process_draws(card), self.turns_contest,
-                                          self.player_turns, self.adv_turns, self.np_random, self.reward + 1))
+                    all_moves.append(MacaoMinmax(new_player_hand, copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot + [card]), copy.deepcopy(self.deck),
+                                                 get_card_suite(card), self.drawing_contest + self.process_draws(card), self.turns_contest,
+                                                 self.player_turns, self.adv_turns, self.np_random, self.reward + 1))
                 elif self.check_legal_switch(card) and self.player_turns == 0:
                     new_player_hand = [card_ for card_ in self.player_hand if card_ != card]
                     for suite in ["h", "c", "d", "s"]:
-                        all_moves.append(Game(new_player_hand, copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot + [card]), copy.deepcopy(self.deck),
-                                          [suite], self.drawing_contest, self.turns_contest, self.player_turns, self.adv_turns, self.np_random,
-                                              self.reward + 1 + len([card for card in new_player_hand if same_suite([suite], card)])))
+                        all_moves.append(MacaoMinmax(new_player_hand, copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot + [card]), copy.deepcopy(self.deck),
+                                                     [suite], self.drawing_contest, self.turns_contest, self.player_turns, self.adv_turns, self.np_random,
+                                                     self.reward + 1))
 
             if self.check_legal_pass() and self.player_turns == 0:
                 new_deck = copy.deepcopy(self.deck)
@@ -157,9 +158,9 @@ class Game:
                 new_deck, new_cards_pot = check_if_deck_empty(new_deck, new_cards_pot)
                 new_card, new_deck = draw_card(new_deck, self.np_random)
                 new_player_hand = self.player_hand + [new_card]
-                all_moves.append(Game(new_player_hand, copy.deepcopy(self.adversary_hand), copy.deepcopy(new_cards_pot), copy.deepcopy(new_deck),
-                                      copy.deepcopy(self.suite), self.drawing_contest, self.turns_contest, self.player_turns,
-                                      self.adv_turns, self.np_random, self.reward - 1))
+                all_moves.append(MacaoMinmax(new_player_hand, copy.deepcopy(self.adversary_hand), copy.deepcopy(new_cards_pot), copy.deepcopy(new_deck),
+                                             copy.deepcopy(self.suite), self.drawing_contest, self.turns_contest, self.player_turns,
+                                             self.adv_turns, self.np_random, self.reward - 1))
             if self.check_legal_concede():
                 cards_to_draw = self.drawing_contest
                 new_deck = copy.deepcopy(self.deck)
@@ -169,19 +170,19 @@ class Game:
                 new_player_hand = self.player_hand + new_cards
                 if self.player_turns > 0:
                     self.player_turns -= 1
-                all_moves.append(Game(new_player_hand, copy.deepcopy(self.adversary_hand), copy.deepcopy(new_cards_pot),
-                                      copy.deepcopy(new_deck), copy.deepcopy(self.suite), 0, self.turns_contest, self.player_turns,
-                                      self.adv_turns, self.np_random, self.reward - cards_to_draw))
+                all_moves.append(MacaoMinmax(new_player_hand, copy.deepcopy(self.adversary_hand), copy.deepcopy(new_cards_pot),
+                                             copy.deepcopy(new_deck), copy.deepcopy(self.suite), 0, self.turns_contest, self.player_turns,
+                                             self.adv_turns, self.np_random, self.reward - cards_to_draw))
             elif self.check_legal_wait():
                 turns_to_wait = self.player_turns + self.turns_contest
                 player_turns_to_wait = turns_to_wait
-                all_moves.append(Game(copy.deepcopy(self.player_hand), copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot),
-                                      copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.drawing_contest, 0,
-                                      player_turns_to_wait, self.adv_turns, self.np_random, self.reward - turns_to_wait))
+                all_moves.append(MacaoMinmax(copy.deepcopy(self.player_hand), copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot),
+                                             copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.drawing_contest, 0,
+                                             player_turns_to_wait - 1, self.adv_turns, self.np_random, self.reward - turns_to_wait))
             if self.player_turns > 0 and not self.check_legal_wait() and not self.check_legal_concede():
-                all_moves.append(Game(copy.deepcopy(self.player_hand), copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot),
-                                      copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.drawing_contest, self.turns_contest,
-                                      self.player_turns - 1, self.adv_turns, self.np_random, self.reward))
+                all_moves.append(MacaoMinmax(copy.deepcopy(self.player_hand), copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot),
+                                             copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.drawing_contest, self.turns_contest,
+                                             self.player_turns - 1, self.adv_turns, self.np_random, self.reward))
 
         return all_moves
 
@@ -198,7 +199,7 @@ class Game:
 
 
 class State:
-    def __init__(self, game_state: Game, current_player: int, depth: int, parent=None, score=None):
+    def __init__(self, game_state: MacaoMinmax, current_player: int, depth: int, parent=None, score=None):
         self.game_state = game_state
         self.current_player = current_player
 
@@ -212,18 +213,10 @@ class State:
 
     def moves(self):
         l_moves = self.game_state.moves(self.current_player)
-        adv_player = Game.adv_player(self.current_player)
+        adv_player = MacaoMinmax.adv_player(self.current_player)
         l_state_moves = [State(move, adv_player, self.depth - 1, parent=self) for move in l_moves]
 
         return l_state_moves
-
-    def __str__(self):
-        sir = str(self.game_state) + "(Juc curent:" + str(self.current_player) + ")\n"
-        return sir
-
-    def __repr__(self):
-        sir = str(self.game_state) + "(Juc curent:" + str(self.current_player) + ")\n"
-        return sir
 
 
 def alpha_beta(alpha: int=-500, beta: int=500, state: State=None):
@@ -242,7 +235,7 @@ def alpha_beta(alpha: int=-500, beta: int=500, state: State=None):
         print(state.game_state.deck)
         print("????")
 
-    if state.current_player == Game.MAXP:
+    if state.current_player == MacaoMinmax.MAXP:
         current_score = float('-inf')
 
         for move in state.possible_moves:
@@ -257,7 +250,7 @@ def alpha_beta(alpha: int=-500, beta: int=500, state: State=None):
                 if alpha >= beta:
                     break
 
-    elif state.current_player == Game.MINP:
+    elif state.current_player == MacaoMinmax.MINP:
         current_score = float('inf')
 
         for move in state.possible_moves:

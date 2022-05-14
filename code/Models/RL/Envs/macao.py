@@ -6,7 +6,7 @@ import gym
 from gym import spaces
 from gym.utils import seeding
 
-from Models.RL.Envs.macao_minmax import alpha_beta, State, Game
+from Models.RL.Envs.macao_minmax import alpha_beta, State, MacaoMinmax
 from Models.RL.Envs.macao_random import MacaoRandom
 from Models.RL.Envs.macao_utils import build_deck, draw_cards, draw_card, draw_hand,get_last_5_cards, get_card_suite, same_suite, shuffle_deck,\
                                         check_if_deck_empty
@@ -102,13 +102,13 @@ class MacaoEnv(gym.Env):
         return self._get_obs()
 
     def _get_obs(self):
-        return set(self.player_hand), self.cards_pot[-1], self.drawing_contest, self.turns_contest, self.player_turns_to_wait,\
+        return set(self.player_hand), self.cards_pot[-1], self.cards_pot, self.drawing_contest, self.turns_contest, self.player_turns_to_wait,\
                 self.adversary_turns_to_wait, len(self.adversary_hand), self.suite, \
                len(self.deck) == 0 and len(self.cards_pot) == 1
 
 
     def _get_adv_obs(self):
-        return set(self.adversary_hand), self.cards_pot[-1], self.drawing_contest, self.turns_contest, self.adversary_turns_to_wait,\
+        return set(self.adversary_hand), self.cards_pot[-1], self.cards_pot, self.drawing_contest, self.turns_contest, self.adversary_turns_to_wait,\
                 self.player_turns_to_wait, len(self.player_hand), self.suite, \
                len(self.deck) == 0 and len(self.cards_pot) == 1
 
@@ -134,11 +134,11 @@ class MacaoEnv(gym.Env):
         return self.turns_contest > 0
 
     def build_state_from_env(self):
-        game = Game(copy.deepcopy(self.player_hand), copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot), \
-                    copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.drawing_contest, self.turns_contest,
-                    copy.deepcopy(self.player_turns_to_wait), copy.deepcopy(self.adversary_turns_to_wait),
-                    copy.deepcopy(self.np_random), 0)
-        return State(game_state=game, current_player=Game.MAXP, depth=1)  # run min-max for 2 moves at first
+        game = MacaoMinmax(copy.deepcopy(self.player_hand), copy.deepcopy(self.adversary_hand), copy.deepcopy(self.cards_pot), \
+                           copy.deepcopy(self.deck), copy.deepcopy(self.suite), self.drawing_contest, self.turns_contest,
+                           copy.deepcopy(self.player_turns_to_wait), copy.deepcopy(self.adversary_turns_to_wait),
+                           copy.deepcopy(self.np_random), 0)
+        return State(game_state=game, current_player=MacaoMinmax.MAXP, depth=2)  # run min-max for 2 moves at first
 
     def final_state(self):
         """
@@ -147,12 +147,6 @@ class MacaoEnv(gym.Env):
         if not self.has_to_wait() and not self.has_to_draw() and len(self.player_hand) == 0:
             return 10 ** 2
         if len(self.adversary_hand) == 0 and not self.has_to_draw() and not self.has_to_wait():
-            for card in self.player_hand:
-                # check if player could potentially keep the game alive
-                if (card[0] in {"2", "3", "5"} or card[:3] == "jok") and self.has_to_draw():
-                    return 0
-                if card[0] == "A" and self.has_to_wait():
-                    return 0
             return -10 ** 2
         return 0
 
@@ -211,9 +205,9 @@ class MacaoEnv(gym.Env):
             self.player_hand.remove(extra_info[:2])
             self.cards_pot.append(extra_info[:2])
             reward += 1
-            for card in self.player_hand:
-                if same_suite(self.suite, card):
-                    reward += 1
+            # for card in self.player_hand:
+            #     if same_suite(self.suite, card):
+            #         reward += 1
         elif action == 5:
             assert self.player_turns_to_wait > 0
         if self.player_turns_to_wait > 0:
@@ -231,9 +225,9 @@ class MacaoEnv(gym.Env):
         done = 1 if final != 0 else 0
 
         if not done:
-            new_state = alpha_beta(state=self.build_state_from_env()).best_next_state  # type: State
+            next_state = alpha_beta(state=self.build_state_from_env()).best_next_state  # type: State
             # update env after min-max choice
-            game_state = new_state.game_state
+            game_state = next_state.game_state
             self.adversary_hand = game_state.adversary_hand
             self.cards_pot = game_state.cards_pot
             self.drawing_contest = game_state.drawing_contest
@@ -339,11 +333,11 @@ class MacaoEnv(gym.Env):
             if self.adversary_turns_to_wait > 0:
                 self.adversary_turns_to_wait -= 1
 
-
         final = self.final_state()
         done = 1 if final != 0 else 0
 
         return self._get_obs(), reward + final, done
+
     def render(self, mode="human"):
         print(f"Your hand is {self.player_hand}.")
         print(f"Dealer has {len(self.adversary_hand)} more cards.")
