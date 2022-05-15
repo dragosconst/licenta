@@ -29,10 +29,8 @@ class SepticaMinmax():
             return len(self.played_cards) > 0
         return card[0] == "7" or card[0] == self.played_cards[0][0]
 
-    def card_is_challenge(self, card):
-        if len(self.played_cards) == 0:
-            return False
-        return card[0] == "7" or card[0] == self.played_cards[0][0]
+    def card_is_challenge(self, card, new_played_cards):
+        return card[0] == "7" or card[0] == new_played_cards[0][0] or len(new_played_cards) == 1
 
     def check_legal_end(self, player):
         return player == self.first_player and len(self.played_cards) > 0
@@ -48,7 +46,7 @@ class SepticaMinmax():
                     new_hand = [card_ for card_ in self.adversary_hand if card_ != card]
                     new_played_cards = self.played_cards + [card]
                     all_moves.append(SepticaMinmax(copy.deepcopy(self.player_hand), copy.deepcopy(new_hand), new_played_cards,
-                                                   copy.deepcopy(self.deck), self.card_is_challenge(card), self.first_player,
+                                                   copy.deepcopy(self.deck), self.card_is_challenge(card, new_played_cards), self.first_player,
                                                    self.player_score, self.adversary_score, copy.deepcopy(self.np_random), self.reward))
             if self.check_legal_end(player):
                 # means first player is MAXP
@@ -77,7 +75,7 @@ class SepticaMinmax():
                     new_hand = [card_ for card_ in self.player_hand if card_ != card]
                     new_played_cards = self.played_cards + [card]
                     all_moves.append(SepticaMinmax(copy.deepcopy(new_hand), copy.deepcopy(self.adversary_hand), new_played_cards,
-                                                   copy.deepcopy(self.deck), self.card_is_challenge(card), self.first_player,
+                                                   copy.deepcopy(self.deck), self.card_is_challenge(card, new_played_cards), self.first_player,
                                                    self.player_score, self.adversary_score, copy.deepcopy(self.np_random), self.reward))
             if self.check_legal_end(player):
                 # means first player is MINP

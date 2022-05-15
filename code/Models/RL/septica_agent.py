@@ -1,6 +1,7 @@
 from typing import List, Tuple, Dict
 import random
 from collections import deque
+import time
 
 import torch
 import torch.nn as nn
@@ -62,6 +63,7 @@ class SepticaModel(nn.Module):
         output = self.output_layer(h)
         return output
 
+
 class SepticaAgent:
     def __init__(self, env: SepticaEnv, replay_buff_size=100, gamma=0.9, batch_size=512, lr=1e-3, steps_per_dqn=20,
                  pre_train_steps=1, eps_scheduler=LinearScheduleEpsilon(), max_steps_per_episode: int=200,
@@ -119,10 +121,10 @@ class SepticaAgent:
 
     def check_legal_action(self, state, action, extra_info=None):
         player_hand_one_hot, first_card_one_hot, used_cards, value, is_first, is_challenging = state
-        player_hand = []
+        player_hand = set()
         for idx, card in enumerate(player_hand_one_hot):
             if card:
-                player_hand.append(self.full_deck[idx])
+                player_hand.add(self.full_deck[idx])
         first_card = None
         for idx, card in enumerate(first_card_one_hot):
             if card:
@@ -136,9 +138,9 @@ class SepticaAgent:
             card = extra_info
             if card not in player_hand:
                 return False
-            if is_first and first_card is None:
+            elif is_first and first_card is None:
                 return True
-            if is_first and is_challenging:
+            elif is_first and is_challenging:
                 return card[0] == "7" or card[0] == first_card[0]
             elif is_first and not is_challenging and first_card is not None:
                 return False
@@ -308,19 +310,107 @@ class SepticaAgent:
                 print(f"Reward of last {print_freq} eps is {sum(running_mean_reward)/len(running_mean_reward)}")
                 print(f"Avg loss so far is {sum(avg_losses)/len(avg_losses)}.")
             if e % save_freq == 0:
-                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_{e}_doubleq.model")
-                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_{e}_doubleq.model")
+                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_{e}_doubleq_smollr.model")
+                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_{e}_doubleq_smollr.model")
 
     def save_models(self):
-        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq.model")
-        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq.model")
+        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_smollr.model")
+        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_smollr.model")
 
+    def make_state_readable(self, state):
+        player_hand, first_card, used_cards, value, is_first, is_challenging = state
+        new_first_card = None
+        for idx, card in enumerate(first_card):
+            if card:
+                new_first_card = self.full_deck[idx]
+        new_hand = set()
+        for idx, card in enumerate(player_hand):
+            if card:
+                new_hand.add(self.full_deck[idx])
+        new_used = set()
+        for idx, card in enumerate(used_cards):
+            if card:
+                new_used.add(self.full_deck[idx])
+        value = value[0].item()
+        is_first = is_first[0].item()
+        is_challenging = is_challenging[0].item()
+        print(f"Hand is {new_hand}.")
+        print(f"Last card pot is {new_first_card}.")
+        print(f"Used cards is {new_used}")
+        print(f"Value is {value}.")
+        print(f"Is first is {is_first}.")
+        print(f"Is challenging is {is_challenging}.")
+
+    @torch.inference_mode()
+    def run_regular_episode(self):
+        self.q.eval()
+        self.q_target.eval()
+        """
+        Run a single training episode
+        """
+        init = self.env.reset()
+
+        ep_reward = 0
+        current_state = self.process_state(init)
+        current_action = None
+        total_loss = 0
+        num_loss_comp = 0
+        epsilon = 1.0
+        old_reward = None
+        reward = None
+        for ep_step in range(10 ** 4):
+            # self.make_state_readable(current_state)
+            epsilon = self.eps_scheduler.get_value(step=self.total_steps)
+
+            batch = [current_state]
+            actions = self.get_action(batch, eps=0)
+            current_action, current_extra_info = actions[0]
+            # print(f"Took action {current_action}, {current_extra_info}.")
+            old_reward = ep_reward
+            new_state, reward, done = self.step(current_action, current_extra_info)
+            new_state_proc = self.process_state(new_state)
+            ep_reward += reward
+            # print(f"Got reward {reward}., total reward {ep_reward}")
+            # print("-"*50)
+
+            current_state = new_state_proc
+            self.total_steps += 1
+
+            if done:
+                if old_reward is not None and ep_reward - old_reward >= 70:
+                    done = 1
+                else:
+                    done = -1
+                break
+        avg_loss = (total_loss/num_loss_comp if num_loss_comp else 0)
+        # print(f"Full reward is {ep_reward}.")
+        return ep_reward, avg_loss, epsilon, done
+
+    def get_statistics(self, num_iters: int=10**2):
+        wins = 0
+        for i in trange(num_iters):
+            reward, *_, win = self.run_regular_episode()
+            wins += 1 if reward >= 1 else 0
+        print(f"Average win rate is {wins/num_iters*100}")
+
+def get_septica_agent(env):
+    agent = SepticaAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-3, pre_train_steps=300,
+                             eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.1, pre_train_steps=300,
+                                                                 final_eps_step=10 ** 5))
+    agent.total_steps = 1000
+    agent.q.load_state_dict(
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq.model"))
+    agent.q_target.load_state_dict(
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq.model"))
+    return agent
 
 if __name__ == "__main__":
     env = SepticaEnv()
 
-    macao_agent = SepticaAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-3, pre_train_steps=300,
+    macao_agent = SepticaAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-2, pre_train_steps=300,
                              eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.05, pre_train_steps=300,
                                                                  final_eps_step=5*10 ** 4))
-    macao_agent.train(max_episodes=10**4)
-    macao_agent.save_models()
+    macao_agent = get_septica_agent(env)
+    macao_agent.get_statistics(10**4)
+    # macao_agent.train(max_episodes=10**4)
+    # macao_agent.save_models()

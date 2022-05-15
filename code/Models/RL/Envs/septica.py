@@ -6,6 +6,7 @@ from gym.utils import seeding
 
 from Models.RL.Envs.septica_utils import draw_card, draw_hand, build_deck, play_value, draw_until, shuffle_deck
 from Models.RL.Envs.septica_minmax import SepticaMinmax, alpha_beta, SepticaState
+import Models.RL.septica_agent as sa
 
 
 def deepc(object):
@@ -82,6 +83,11 @@ class SepticaEnv(gym.Env):
                self.used_cards, play_value(self.played_cards), \
                self.is_first_player, self.is_challenging
 
+    def _get_adv_obs(self):
+        return self.adversary_hand, self.played_cards[0] if len(self.played_cards) > 0 else None, \
+               self.used_cards, play_value(self.played_cards), \
+               not self.is_first_player, self.is_challenging or len(self.played_cards) == 1
+
     def check_legal_put(self, card):
         if not self.is_challenging:
             # when there's no challenge going on, any card goes
@@ -92,7 +98,7 @@ class SepticaEnv(gym.Env):
         return card[0] == "7" or card[0] == self.played_cards[0][0]
 
     def check_start_challenge(self, card):
-        return len(self.played_cards) > 0 and (card[0] == "7" or card[0] == self.played_cards[0][0])
+        return len(self.played_cards) > 0 and (card[0] == "7" or card[0] == self.played_cards[0][0] or len(self.played_cards) == 1)
 
     def build_state_from_env(self):
         game = SepticaMinmax(deepc(self.player_hand), deepc(self.adversary_hand), deepc(self.played_cards), deepc(self.deck),
@@ -100,17 +106,20 @@ class SepticaEnv(gym.Env):
                              self.player_points, self.adversary_points, deepc(self.np_random), 0)
         return SepticaState(game_state=game, current_player=SepticaMinmax.MAXP, depth=4)
 
-    def step(self, action, extra_info=None):
+    def action_processing(self, action, extra_info=None):
         reward = 0
         if action == 0:
             # put down card
             assert extra_info is not None
             card = extra_info
             assert self.check_legal_put(card)
-            self.is_challenging = self.check_start_challenge(card)
             self.player_hand.remove(card)
             self.played_cards.append(card)
+            self.used_cards.update(self.played_cards)
+            self.is_challenging = self.check_start_challenge(card)
         elif action == 1:
+            # can only come here if they are the first player
+            assert self.is_first_player
             assert len(self.played_cards) > 0  # can't end hand before playing
             # end hand
             if self.is_challenging:
@@ -125,6 +134,11 @@ class SepticaEnv(gym.Env):
                 self.player_hand, self.adversary_hand, self.deck = draw_until(self.deck, self.player_hand, self.adversary_hand, 4, self.np_random)
             self.is_first_player = not self.is_first_player
             self.is_challenging = False
+        return reward
+
+    def step(self, action, extra_info=None):
+        reward = self.action_processing(action, extra_info)
+
         done = 0
         if len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:
             # reward += 5 * (1 if self.player_points > self.adversary_points else -1) # might have no effect
@@ -164,10 +178,61 @@ class SepticaEnv(gym.Env):
         self.adversary_points = 0
         return self._get_obs()
 
+    def step_agent(self, action, extra_info=None):
+        reward = self.action_processing(action, extra_info)
+
+        done = 0
+        if len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:
+            # reward += 5 * (1 if self.player_points > self.adversary_points else -1) # might have no effect
+            done = 1
+
+        if not done:
+            # agent = sa.get_septica_agent(self)
+            agent = None
+            print(self._get_adv_obs())
+            action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
+            action, extra_info = action
+            assert action is None or self.action_space.contains(action)
+            if action == 0:
+                # put down card
+                assert extra_info is not None
+                card = extra_info
+                # assert self.check_legal_put(card)
+                self.adversary_hand.remove(card)
+                self.played_cards.append(card)
+                self.used_cards.update(self.played_cards)
+                self.is_challenging = self.check_start_challenge(card)
+            elif action == 1:
+                assert not self.is_first_player
+                assert len(self.played_cards) > 0  # can't end hand before playing
+                # end hand
+                if self.is_challenging:
+                    self.player_points += play_value(self.played_cards)
+                    reward += play_value(self.played_cards)
+                else:
+                    self.adversary_points += play_value(self.played_cards)
+                    reward -= play_value(self.played_cards)
+                self.used_cards.update(self.played_cards)
+                self.played_cards = []
+                if len(self.deck) > 0:
+                    self.player_hand, self.adversary_hand, self.deck = draw_until(self.deck, self.player_hand,
+                                                                                  self.adversary_hand, 4,
+                                                                                  self.np_random)
+                self.is_first_player = not self.is_first_player
+                self.is_challenging = False
+            print(self._get_obs())
+
+        done = 0
+        if len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:
+            # reward += 5 * (1 if self.player_points > self.adversary_points else -1) # might have no effect
+            done = 1
+
+        return self._get_obs(), reward, done
+
     def render(self, mode="human"):
         print(f"Your hand is {self.player_hand}.")
         print(f"Adversary has {len(self.adversary_hand)} more cards.")
-        print(f"Dealer has {self.adversary_hand} cards.")
+        # print(f"Dealer has {self.adversary_hand} cards.")
         print(f"Cards down are {self.played_cards}.")
         print(f"Your score is {self.player_points}.")
         print(f"Adv score is {self.adversary_points}")
