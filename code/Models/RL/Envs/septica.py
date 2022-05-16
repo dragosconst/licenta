@@ -4,9 +4,9 @@ import gym
 from gym import spaces
 from gym.utils import seeding
 
-from Models.RL.Envs.septica_utils import draw_card, draw_hand, build_deck, play_value, draw_until, shuffle_deck
+from Models.RL.Envs.septica_utils import draw_card, draw_hand, build_deck, play_value, draw_until, shuffle_deck, REWARD_MULT
 from Models.RL.Envs.septica_minmax import SepticaMinmax, alpha_beta, SepticaState
-import Models.RL.septica_agent as sa
+# import Models.RL.septica_agent as sa
 
 
 def deepc(object):
@@ -104,7 +104,7 @@ class SepticaEnv(gym.Env):
         game = SepticaMinmax(deepc(self.player_hand), deepc(self.adversary_hand), deepc(self.played_cards), deepc(self.deck),
                              self.is_challenging, int(not self.is_first_player),
                              self.player_points, self.adversary_points, deepc(self.np_random), 0)
-        return SepticaState(game_state=game, current_player=SepticaMinmax.MAXP, depth=4)
+        return SepticaState(game_state=game, current_player=SepticaMinmax.MAXP, depth=3)
 
     def action_processing(self, action, extra_info=None):
         reward = 0
@@ -123,11 +123,11 @@ class SepticaEnv(gym.Env):
             assert len(self.played_cards) > 0  # can't end hand before playing
             # end hand
             if self.is_challenging:
-                self.adversary_points += play_value(self.played_cards)
-                reward -= play_value(self.played_cards)
+                self.adversary_points += play_value(self.played_cards) * REWARD_MULT
+                reward -= play_value(self.played_cards) * REWARD_MULT
             else:
-                self.player_points += play_value(self.played_cards)
-                reward += play_value(self.played_cards)
+                self.player_points += play_value(self.played_cards) * REWARD_MULT
+                reward += play_value(self.played_cards) * REWARD_MULT
             self.used_cards.update(self.played_cards)
             self.played_cards = []
             if len(self.deck) > 0:
@@ -141,8 +141,12 @@ class SepticaEnv(gym.Env):
 
         done = 0
         if len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:
-            # reward += 5 * (1 if self.player_points > self.adversary_points else -1) # might have no effect
+            reward += 5 * (1 if self.player_points > self.adversary_points else -1) * REWARD_MULT  # might have no effect
             done = 1
+        if not done and self.player_points + self.adversary_points == 8 * REWARD_MULT:
+            done = 1
+            reward += 5 * (
+                1 if self.player_points > self.adversary_points else -1) * REWARD_MULT  # might have no effect
 
         # adversary stuff
         if not done:
@@ -159,10 +163,13 @@ class SepticaEnv(gym.Env):
             self.is_first_player = game_state.first_player == SepticaMinmax.MINP
             reward += game_state.reward
 
-        done = 0
-        if len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:
-            # reward += 5 * (1 if self.player_points > self.adversary_points else -1) # might have no effect
+        if not done and len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:
+            reward += 5 * (1 if self.player_points > self.adversary_points else -1) * REWARD_MULT # might have no effect
             done = 1
+        if not done and self.player_points + self.adversary_points == 8 * REWARD_MULT:
+            done = 1
+            reward += 5 * (1 if self.player_points > self.adversary_points else -1) * REWARD_MULT # might have no effect
+
         return self._get_obs(), reward, done
 
     def reset(self):
@@ -207,11 +214,11 @@ class SepticaEnv(gym.Env):
                 assert len(self.played_cards) > 0  # can't end hand before playing
                 # end hand
                 if self.is_challenging:
-                    self.player_points += play_value(self.played_cards)
-                    reward += play_value(self.played_cards)
+                    self.player_points += play_value(self.played_cards) * REWARD_MULT
+                    reward += play_value(self.played_cards) * REWARD_MULT
                 else:
-                    self.adversary_points += play_value(self.played_cards)
-                    reward -= play_value(self.played_cards)
+                    self.adversary_points += play_value(self.played_cards) * REWARD_MULT
+                    reward -= play_value(self.played_cards) * REWARD_MULT
                 self.used_cards.update(self.played_cards)
                 self.played_cards = []
                 if len(self.deck) > 0:
@@ -224,7 +231,7 @@ class SepticaEnv(gym.Env):
 
         done = 0
         if len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:
-            # reward += 5 * (1 if self.player_points > self.adversary_points else -1) # might have no effect
+            reward += 5 * (1 if self.player_points > self.adversary_points else -1) * REWARD_MULT  # might have no effect
             done = 1
 
         return self._get_obs(), reward, done
@@ -243,7 +250,7 @@ class SepticaEnv(gym.Env):
         if len(action) >= 2:
             extra_info = " ".join(action[1:])
         action = int(action[0])
-        _, reward, done = self.step(action, extra_info)
+        _, reward, done = self.step_agent(action, extra_info)
         print(f"Pot after adv move: {self.played_cards}.")
         print(f"You got a reward of {reward}.")
         print("-"*100)

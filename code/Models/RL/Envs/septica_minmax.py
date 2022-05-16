@@ -1,7 +1,7 @@
 from typing import List, Tuple, Dict
 import copy
 
-from Models.RL.Envs.septica_utils import draw_card, draw_hand, build_deck, play_value, draw_until
+from Models.RL.Envs.septica_utils import draw_card, draw_hand, build_deck, play_value, draw_until, REWARD_MULT
 
 class SepticaMinmax():
     MINP = 0
@@ -53,11 +53,11 @@ class SepticaMinmax():
                 new_player_score = self.player_score
                 new_adversary_score = self.adversary_score
                 if not self.is_challenging:
-                    new_adversary_score = self.adversary_score + play_value(self.played_cards)
-                    add_reward = -play_value(self.played_cards)
+                    new_adversary_score = self.adversary_score + play_value(self.played_cards) * REWARD_MULT
+                    add_reward = -play_value(self.played_cards) * REWARD_MULT
                 else:
-                    new_player_score = self.player_score + play_value(self.played_cards)
-                    add_reward = play_value(self.played_cards)
+                    new_player_score = self.player_score + play_value(self.played_cards) * REWARD_MULT
+                    add_reward = play_value(self.played_cards) * REWARD_MULT
                 new_player_hand = copy.deepcopy(self.player_hand)
                 new_adversary_hand = copy.deepcopy(self.adversary_hand)
                 new_deck = copy.deepcopy(self.deck)
@@ -82,11 +82,11 @@ class SepticaMinmax():
                 new_player_score = self.player_score
                 new_adversary_score = self.adversary_score
                 if not self.is_challenging:
-                    new_player_score = self.player_score + play_value(self.played_cards)
-                    add_reward = play_value(self.played_cards)
+                    new_player_score = self.player_score + play_value(self.played_cards) * REWARD_MULT
+                    add_reward = play_value(self.played_cards) * REWARD_MULT
                 else:
-                    new_adversary_score = self.adversary_score + play_value(self.played_cards)
-                    add_reward = -play_value(self.played_cards)
+                    new_adversary_score = self.adversary_score + play_value(self.played_cards) * REWARD_MULT
+                    add_reward = -play_value(self.played_cards) * REWARD_MULT
                 new_player_hand = copy.deepcopy(self.player_hand)
                 new_adversary_hand = copy.deepcopy(self.adversary_hand)
                 new_deck = copy.deepcopy(self.deck)

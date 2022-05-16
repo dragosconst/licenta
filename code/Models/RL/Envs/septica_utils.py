@@ -1,6 +1,7 @@
 from typing import List, Tuple
 import random
 
+REWARD_MULT = 10
 
 def shuffle_deck(deck: List) -> List:
     random.shuffle(deck)

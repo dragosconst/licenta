@@ -20,12 +20,12 @@ class SepticaModel(nn.Module):
         super(SepticaModel, self).__init__()
         self.device = device
 
-        self.hand_proj = nn.Linear(in_features=54, out_features=25)
-        self.first_proj = nn.Linear(in_features=54, out_features=20)
-        self.used_proj = nn.Linear(in_features=54, out_features=30)
+        self.hand_proj = nn.Linear(in_features=32, out_features=20)
+        self.first_proj = nn.Linear(in_features=32, out_features=20)
+        self.used_proj = nn.Linear(in_features=32, out_features=25)
 
         self.hidden_layers = nn.Sequential(
-            nn.Linear(in_features=78, out_features=220),
+            nn.Linear(in_features=68, out_features=220),
             nn.ReLU(),
             nn.Linear(in_features=220, out_features=150),
             nn.ReLU(),
@@ -103,13 +103,13 @@ class SepticaAgent:
 
     def process_state(self, state) -> Tuple:
         player_hand, first_card, used_cards, value, is_first, is_challenging = state
-        new_player_hand = torch.zeros(54)
+        new_player_hand = torch.zeros(len(self.full_deck))
         for card in player_hand:
             new_player_hand[self.full_deck.index(card)] = 1
-        new_first = torch.zeros(54)
+        new_first = torch.zeros(len(self.full_deck))
         if first_card is not None:
             new_first[self.full_deck.index(first_card)] = 1
-        new_used_cards = torch.zeros(54)
+        new_used_cards = torch.zeros(len(self.full_deck))
         for card in used_cards:
             new_used_cards[self.full_deck.index(card)] = 1
         is_first = 1 if is_first else 0
@@ -310,12 +310,12 @@ class SepticaAgent:
                 print(f"Reward of last {print_freq} eps is {sum(running_mean_reward)/len(running_mean_reward)}")
                 print(f"Avg loss so far is {sum(avg_losses)/len(avg_losses)}.")
             if e % save_freq == 0:
-                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_{e}_doubleq_smollr.model")
-                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_{e}_doubleq_smollr.model")
+                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_{e}_doubleq_difrewards_dep3.model")
+                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_{e}_doubleq_difrewards_dep3.model")
 
     def save_models(self):
-        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_smollr.model")
-        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_smollr.model")
+        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_difrewards_dep3.model")
+        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_difrewards_dep3.model")
 
     def make_state_readable(self, state):
         player_hand, first_card, used_cards, value, is_first, is_challenging = state
@@ -390,7 +390,7 @@ class SepticaAgent:
         wins = 0
         for i in trange(num_iters):
             reward, *_, win = self.run_regular_episode()
-            wins += 1 if reward >= 1 else 0
+            wins += 1 if reward > 0 else 0
         print(f"Average win rate is {wins/num_iters*100}")
 
 def get_septica_agent(env):
@@ -399,18 +399,19 @@ def get_septica_agent(env):
                                                                  final_eps_step=10 ** 5))
     agent.total_steps = 1000
     agent.q.load_state_dict(
-        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq.model"))
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_difrewards_dep3.model"))
     agent.q_target.load_state_dict(
-        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq.model"))
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_difrewards_dep3.model"))
     return agent
+
 
 if __name__ == "__main__":
     env = SepticaEnv()
 
-    macao_agent = SepticaAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-2, pre_train_steps=300,
-                             eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.05, pre_train_steps=300,
+    septica_agent = SepticaAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-3, pre_train_steps=300,
+                                 eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.05, pre_train_steps=300,
                                                                  final_eps_step=5*10 ** 4))
-    macao_agent = get_septica_agent(env)
-    macao_agent.get_statistics(10**4)
-    # macao_agent.train(max_episodes=10**4)
-    # macao_agent.save_models()
+    septica_agent = get_septica_agent(env)
+    septica_agent.get_statistics(10 ** 4)
+    # septica_agent.train(max_episodes=10**4)
+    # septica_agent.save_models()
