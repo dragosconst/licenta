@@ -6,7 +6,7 @@ from gym.utils import seeding
 
 from Models.RL.Envs.septica_utils import draw_card, draw_hand, build_deck, play_value, draw_until, shuffle_deck, REWARD_MULT
 from Models.RL.Envs.septica_minmax import SepticaMinmax, alpha_beta, SepticaState
-# import Models.RL.septica_agent as sa
+import Models.RL.septica_agent as sa
 
 
 def deepc(object):
@@ -104,7 +104,7 @@ class SepticaEnv(gym.Env):
         game = SepticaMinmax(deepc(self.player_hand), deepc(self.adversary_hand), deepc(self.played_cards), deepc(self.deck),
                              self.is_challenging, int(not self.is_first_player),
                              self.player_points, self.adversary_points, deepc(self.np_random), 0)
-        return SepticaState(game_state=game, current_player=SepticaMinmax.MAXP, depth=3)
+        return SepticaState(game_state=game, current_player=SepticaMinmax.MAXP, depth=4)
 
     def action_processing(self, action, extra_info=None):
         reward = 0
@@ -113,6 +113,9 @@ class SepticaEnv(gym.Env):
             assert extra_info is not None
             card = extra_info
             assert self.check_legal_put(card)
+            if card[0] == "7" and play_value(self.played_cards) == 0:
+                # discourage from wasting 7s
+                reward -= 0.5 * REWARD_MULT
             self.player_hand.remove(card)
             self.played_cards.append(card)
             self.used_cards.update(self.played_cards)
@@ -194,8 +197,8 @@ class SepticaEnv(gym.Env):
             done = 1
 
         if not done:
-            # agent = sa.get_septica_agent(self)
-            agent = None
+            agent = sa.get_septica_agent(self)
+            # agent = None
             print(self._get_adv_obs())
             action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
             action, extra_info = action

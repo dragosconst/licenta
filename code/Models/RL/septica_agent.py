@@ -310,12 +310,12 @@ class SepticaAgent:
                 print(f"Reward of last {print_freq} eps is {sum(running_mean_reward)/len(running_mean_reward)}")
                 print(f"Avg loss so far is {sum(avg_losses)/len(avg_losses)}.")
             if e % save_freq == 0:
-                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_{e}_doubleq_difrewards_dep3.model")
-                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_{e}_doubleq_difrewards_dep3.model")
+                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_{e}_doubleq_7pen_dep3.model")
+                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_{e}_doubleq_7pen_dep3.model")
 
     def save_models(self):
-        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_difrewards_dep3.model")
-        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_difrewards_dep3.model")
+        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_7pen_dep3.model")
+        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_7pen_dep3.model")
 
     def make_state_readable(self, state):
         player_hand, first_card, used_cards, value, is_first, is_challenging = state
@@ -399,9 +399,9 @@ def get_septica_agent(env):
                                                                  final_eps_step=10 ** 5))
     agent.total_steps = 1000
     agent.q.load_state_dict(
-        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_difrewards_dep3.model"))
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_7pen_dep3.model"))
     agent.q_target.load_state_dict(
-        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_difrewards_dep3.model"))
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_7pen_dep3.model"))
     return agent
 
 
