@@ -23,7 +23,7 @@ def grab_selected_window_contents(wName: str=None, hwnd=None, w: int=800, h: int
     # print(w, h)
 
     # win32gui.SetForegroundWindow(hwnd)
-    time.sleep(1e-3)
+    # time.sleep(1e-3)
 
     hdesk = win32gui.GetDesktopWindow()
     wDC = win32gui.GetWindowDC(hdesk)

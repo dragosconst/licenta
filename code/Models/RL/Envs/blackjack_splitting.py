@@ -58,12 +58,12 @@ class BlackjackEnvSplit(BlackjackEnv):
     in which case splitting is not permitted, or the value of the identical card. The other dimensions are identical to
     a regular Blackjack implementation.
 
-    I have also added the possibility of doubling, by using the action 3. In case of a doubling, if the player wins
-    the hand, they get double the reward, otherwise, they get double the negative reward.
+    Actions 3 and 4 reperesent double or hit and double or stand respectively. The env will double when possible,
+    and hit in every other state.
     """
     def __init__(self, natural=False, sab=False):
         super().__init__(natural, sab)
-        self.action_space = spaces.Discrete(4)
+        self.action_space = spaces.Discrete(5)
 
         self.player = None # current playing hand
         self.dealer = None # current dealer hand
@@ -77,8 +77,8 @@ class BlackjackEnvSplit(BlackjackEnv):
         return 10 if self.player[0] in {'K', 'Q', 'J'} else int(self.player[0])
 
     def _get_obs(self):
-        return (self.get_split_val(), sum_hand(self.player), 10 if self.dealer[0] in {"K", "Q", "J"}
-        else int(self.dealer[0]), usable_ace(self.player), len(self.player) == 2)
+        return self.get_split_val(), sum_hand(self.player), 10 if self.dealer[0] in {"K", "Q", "J"} \
+        else int(self.dealer[0]), usable_ace(self.player)
 
     def reset(self, seed: Optional[int] = None, return_info = False):
         super().reset()
@@ -119,20 +119,44 @@ class BlackjackEnvSplit(BlackjackEnv):
         elif action == 0: # stand
             done = True
             reward = 0
-        elif action == 3: # double
-            self.player.append(draw_card(self.np_random))
-            done = True
-            if is_bust(self.player):
-                reward = -2
+        elif action == 3:  # double or hit
+            doubled = False
+            if len(self.player) == 2:
+                self.player.append(draw_card(self.np_random))
+                done = True
+                doubled = True
+                if is_bust(self.player):
+                    reward = -2
+                else:
+                    reward = 0
             else:
+                self.player.append(draw_card(self.np_random))
+                done = False
+                if is_bust(self.player):
+                    reward = -1
+                    done = True
+                else:
+                    reward = 0
+        elif action == 4:
+            # double or stand
+            doubled = False
+            if len(self.player) == 2:
+                self.player.append(draw_card(self.np_random))
+                done = True
+                doubled = True
+                if is_bust(self.player):
+                    reward = -2
+                else:
+                    reward = 0
+            else:
+                done = True
                 reward = 0
-
         # dealer's turn
         if done and reward >= 0:
             while sum_hand(self.dealer) < 17:
                 self.dealer.append(draw_card(self.np_random))
             reward = cmp(score(self.player), score(self.dealer))
-            if action == 3: # if player just doubled
+            if (action == 4 or action == 3) and doubled:  # if player just doubled
                 reward *= 2
         return self._get_obs(), reward, done, {}
 

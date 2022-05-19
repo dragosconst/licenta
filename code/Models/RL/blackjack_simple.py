@@ -78,31 +78,31 @@ class MCAgent():
         return max(self.start_epsilon * (eps_decay ** n), self.end_epsilon)
 
     def get_action(self, state):
-        split, *_, doubleable = state
+        split, *_ = state
         if state not in self.policy:
-            action = self.env.action_space.sample()
-            while (split is None and action == 2) \
-                    or (doubleable is False and action == 3):
-                action = self.env.action_space.sample()
+            pos_actions = [action for action in range(self.n_action)]
+            if split is None:
+                pos_actions.remove(2)
+            action = random.sample(pos_actions, 1)[0]
             return action
         return self.policy[state]
 
     # select action based on epsilon greedy (or  not)
     def select_action(self, state, epsilon):
-        split, *_, doubleable = state
+        split, *_ = state
         if epsilon is not None and np.random.rand() < epsilon:
-            action = self.env.action_space.sample()
-            while (split is None and action == 2) \
-                    or (doubleable is False and action == 3):
-                action = self.env.action_space.sample()
+            pos_actions = [action for action in range(self.n_action)]
+            if split is None:
+                pos_actions.remove(2)
+            action = random.sample(pos_actions, 1)[0]
         else:
             if state in self.q:
                 action = self.policy[state]
             else:
-                action = self.env.action_space.sample()
-                while (split is None and action == 2) \
-                        or (doubleable is False and action == 3):
-                    action = self.env.action_space.sample()
+                pos_actions = [action for action in range(self.n_action)]
+                if split is None:
+                    pos_actions.remove(2)
+                action = random.sample(pos_actions, 1)[0]
         return action
 
     # run episode with current policy
@@ -136,13 +136,14 @@ class MCAgent():
     # policy update with both e-greedy and regular argmax greedy
     def update_policy_q(self, eps=None):
         for state, values in self.q.items():
-            split, *_, doubleable = state
+            split, *_ = state
             if eps is not None:  # e-Greedy policy updates
                 if np.random.rand() < eps:
-                    self.policy[state] = self.env.action_space.sample()  # sample a random action
-                    while (split is None and self.policy[state] == 2)\
-                          or (doubleable is False and self.policy[state] == 3):
-                        self.policy[state] = self.env.action_space.sample()
+                    pos_actions = [action for action in range(self.n_action)]
+                    if split is None:
+                        pos_actions.remove(2)
+                    action = random.sample(pos_actions, 1)[0]
+                    self.policy[state] = action
                 else:
                     self.policy[state] = np.argmax(values)
             else:  # Greedy policy updates
@@ -193,9 +194,9 @@ class MCAgent():
                 if transitions[-1][2] >= 1:
                     good += 1
             print(f"Win rate so far is {(good / (samples + extra)) * 100}%, epoch {epoch}.")
-            with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_correct_doubles_state_replay.model",
+            with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_new_action_space_fixed.model",
                       "wb") as f:
-                pickle.dump(bj_agent, f)
+                pickle.dump(self, f)
 
     # mc control GLIE
     # using something similar to every-visit mc
@@ -207,7 +208,7 @@ class MCAgent():
             # Generate an episode following current policy
             transitions, old_env = self.run_episode(eps=eps, first_visit=first_visit)
 
-            states, actions, rewards, _, _ = zip(*transitions)
+            states, *_ = zip(*transitions)
             states_replay = 0
             if states[0][0] is not None and (int(states[0][0]) != 10 or int(
                     states[0][2]) != 10):  # first state was a split? in which case, do a state replay 3-4 times
@@ -216,38 +217,13 @@ class MCAgent():
                 states_replay = 3
 
             while states_replay >= 0:
-                # create table of first visit timesteps for first visit MC
-                if first_visit:
-                    first_visit_dict = {}
-                    for ts, s in enumerate(states):
-                        sa = (s, actions[ts])
-                        if sa not in first_visit_dict:
-                            first_visit_dict[sa] = ts
-
-                # Iterate over episode steps in reversed order, T-1, T-2, ....0
-                G = 0  # return output
-                for t in range(len(transitions) - 1, -1, -1):
-                    st = states[t]
-                    at = actions[t]
-
-                    G = self.gamma * G + rewards[t]
-                    if first_visit:
-                        if first_visit_dict[(st, at)] != t:
-                            continue
-
-                    # this piece of code is great because it works for both every visit and first visit
-                    self.action_visits[st][at] += 1
-                    self.state_visits[st] += 1
-                    self.q[st][at] = self.q[st][at] + (1 / self.action_visits[st][at]) * (G - self.q[st][at])
-
-                self.update_policy_q(eps)
+                self.mc_control_one_ep(transitions, eps, first_visit)
                 if states_replay == 0:
                     self.print_value(e, 100 * 10 ** 3, 10 ** 5)
 
                 states_replay -= 1
                 if states_replay > 0:
                     transitions, old_env = self.run_episode(eps=eps, first_visit=first_visit, env=old_env)
-                    states, actions, rewards, _, _ = zip(*transitions)
 
 
 class TablePlayerNoSplit():
@@ -408,6 +384,69 @@ class TablePlayerFull():
         return self.action_table[player * 10 + (dealer - 2 if dealer > 1 else 9)]
 
 
+class TablePlayerNewRules():
+    def __init__(self):
+        self.state = None
+        # table from https://wizardofodds.com/blackjack/images/bj_2d_h17.gif
+        # I will define action 4 as double or hit and action 5 as double or stand
+        # surrenders are ignored
+        self.action_table = [
+        #   2, 3, 4, 5, 6, 7, 8, 9, 10, A
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  # ---regular scores
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  # 8
+            4, 4, 4, 4, 4, 4, 1, 1, 1, 1,  # 9
+            4, 4, 4, 4, 4, 4, 4, 4, 4, 1,  # 10
+            4, 4, 4, 4, 4, 4, 4, 4, 4, 4,  # 11
+            1, 1, 0, 0, 0, 1, 1, 1, 1, 1,  # 12
+            0, 0, 0, 0, 0, 1, 1, 1, 1, 1,  # 13
+            0, 0, 0, 0, 0, 1, 1, 1, 1, 1,  # 14
+            0, 0, 0, 0, 0, 1, 1, 1, 1, 1,  # 15
+            0, 0, 0, 0, 0, 1, 1, 1, 1, 1,  # 16
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  # 17+
+            1, 1, 1, 4, 4, 1, 1, 1, 1, 1,  # ---aces, 2
+            1, 1, 4, 4, 4, 1, 1, 1, 1, 1,  # 3
+            1, 1, 4, 4, 4, 1, 1, 1, 1, 1,  # 4
+            1, 1, 4, 4, 4, 1, 1, 1, 1, 1,  # 5
+            1, 4, 4, 4, 4, 1, 1, 1, 1, 1,  # 6
+            5, 5, 5, 5, 5, 0, 0, 1, 1, 1,  # 7
+            0, 0, 0, 0, 5, 0, 0, 0, 0, 0,  # 8
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  # 9
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2,  # ---splits;A and 8
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  # 10
+            2, 2, 2, 2, 2, 0, 2, 2, 0, 0,  # 9
+            2, 2, 2, 2, 2, 2, 1, 1, 1, 1,  # 7
+            2, 2, 2, 2, 2, 1, 1, 1, 1, 1,  # 6
+            4, 4, 4, 4, 4, 4, 4, 4, 1, 1,  # 5
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  # 4
+            1, 1, 2, 2, 2, 2, 1, 1, 1, 1  # 2,3
+        ]
+        self.hard_mappings = {5: 0, 6: 0, 7: 0, 8: 1, 9: 2, 10: 3,
+                              11: 4, 12: 5, 13: 6, 14: 7, 15: 8, 16: 9,
+                              17: 10, 18: 10, 19: 10, 20: 10, 21: 10}
+        self.soft_mappings = {3: 11, 4: 12, 5: 13, 6: 14, 7: 15, 8: 16,
+                              9: 17, 10: 18, 13: 11, 14: 12, 15: 13, 16: 14, 17: 15, 18: 16,
+                              19: 17, 20: 18}
+        self.splits_mappings = {1: 19, 8: 19, 10: 20, 9: 21, 7: 22, 6: 23, 5: 24, 4: 25, 3: 26, 2: 26}
+        self.dealer_mappings = {2: 0, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 9: 6, 10: 7, 1: 8}
+
+    def get_action(self, state):
+        split, player_sum, dealer, ace, double = state
+        if player_sum == 21:
+            return 0
+        if not ace and split is None:
+            player = self.hard_mappings[player_sum]
+        elif ace and split is None:
+            player = self.soft_mappings[player_sum]
+        elif split is not None:
+            split = 10 if split in {"K", "Q", "J"} else int(split)
+            player = self.splits_mappings[split]
+        action = self.action_table[player * 10 + (dealer - 2 if dealer > 1 else 9)]
+        if action == 4:
+            action = 3 if double else 1
+        elif action == 5:
+            action = 3 if double else 0
+        return action
+
 if __name__ == "__main__":
     env = gym.make('Blackjack-v1')
     env2 = BlackjackEnvSplit(natural=True)
@@ -415,66 +454,66 @@ if __name__ == "__main__":
     # MC eval
     bj_agent = MCAgent(env2)
     bj_agent.mc_control(n_episode=int(3.5 * 10 ** 6), first_visit=True)
-    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_correct_doubles_state_replay.model", "wb") as f:
+    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_new_action_space_fixed.model", "wb") as f:
         pickle.dump(bj_agent, f)
-    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_correct_doubles_state_replay.model", "rb") as f:
+    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_new_action_space_fixed.model", "rb") as f:
         bj_agent = pickle.load(f)
 
     # --------------------------------
     # draw moves table
     # --------------------------------
-    # NO_SPLITS = 28
-    # SPLITS = 36
-    # moves = np.zeros((SPLITS, 10))
-    # moves_visits = np.zeros((SPLITS, 10))
-    # moves -= 1
-    # for state, action in bj_agent.policy.items():
-    #     split, hand, dealer, ace = state
-    #     if split is None:
-    #         if action == 2:
-    #             print(state)
-    #         if not ace:
-    #             if dealer > 1:
-    #                 moves[hand - 5][dealer - 2] = action
-    #                 moves_visits[hand - 5][dealer - 2] = bj_agent.action_visits[state][action]
-    #             else:
-    #                 moves[hand - 5][-1] = action
-    #                 moves_visits[hand - 5][-1] = bj_agent.action_visits[state][action]
-    #         else:
-    #             if dealer > 1:
-    #                 moves[hand - 13 + 17][dealer - 2] = action
-    #                 moves_visits[hand - 13 + 17][dealer - 2] = bj_agent.action_visits[state][action]
-    #             else:
-    #                 moves[hand - 13 + 17][-1] = action
-    #                 moves_visits[hand - 13 + 17][-1] = bj_agent.action_visits[state][action]
-    #     else:
-    #         if split == 1:
-    #             split = 11
-    #         if dealer > 1:
-    #             moves[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][dealer - 2] = action
-    #             moves_visits[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][dealer - 2] = \
-    #                 bj_agent.action_visits[state][action]
-    #         else:
-    #             moves[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][-1] = action
-    #             moves_visits[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][-1] = \
-    #                 bj_agent.action_visits[state][action]
-    #
+    NO_SPLITS = 28
+    SPLITS = 36
+    moves = np.zeros((SPLITS, 10))
+    moves_visits = np.zeros((SPLITS, 10))
+    moves -= 1
+    for state, action in bj_agent.policy.items():
+        split, hand, dealer, ace = state
+        if split is None:
+            if action == 2:
+                print(state)
+            if not ace:
+                if dealer > 1:
+                    moves[hand - 5][dealer - 2] = action
+                    moves_visits[hand - 5][dealer - 2] = bj_agent.action_visits[state][action]
+                else:
+                    moves[hand - 5][-1] = action
+                    moves_visits[hand - 5][-1] = bj_agent.action_visits[state][action]
+            else:
+                if dealer > 1:
+                    moves[hand - 13 + 17][dealer - 2] = action
+                    moves_visits[hand - 13 + 17][dealer - 2] = bj_agent.action_visits[state][action]
+                else:
+                    moves[hand - 13 + 17][-1] = action
+                    moves_visits[hand - 13 + 17][-1] = bj_agent.action_visits[state][action]
+        else:
+            if split == 1:
+                split = 11
+            if dealer > 1:
+                moves[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][dealer - 2] = action
+                moves_visits[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][dealer - 2] = \
+                    bj_agent.action_visits[state][action]
+            else:
+                moves[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][-1] = action
+                moves_visits[(10 if split in {"K", "Q", "J"} else int(split)) - 2 + 26][-1] = \
+                    bj_agent.action_visits[state][action]
+
     # # --------------------------------
     # # heatmap of moves
     # # --------------------------------
-    # xlabels = [2, 3, 4, 5, 6, 7, 8, 9, 10, "A"]
-    # ylabs = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, "A,2",
-    #          "A,3", "A,4", "A,5", "A,6", "A,7", "A,8", "A,9", "A,10",
-    #          "2,2", "3,3", "4,4", "5,5", "6,6", "7,7", "8,8", "9,9", "10,10", "A,A"]
-    # sn.heatmap(moves, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray')
-    # plt.savefig("firstvisit_moves_BIG_double_correct_state_replay.png")
-    # plt.show()
-    # sn.heatmap(moves_visits, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray', cmap="YlGnBu")
-    # plt.savefig("firstvisit_moves_BIG_double_correct_state_replay_visits.png")
-    # plt.show()
-    # print(moves)
+    xlabels = [2, 3, 4, 5, 6, 7, 8, 9, 10, "A"]
+    ylabs = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, "A,2",
+             "A,3", "A,4", "A,5", "A,6", "A,7", "A,8", "A,9", "A,10",
+             "2,2", "3,3", "4,4", "5,5", "6,6", "7,7", "8,8", "9,9", "10,10", "A,A"]
+    sn.heatmap(moves, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray')
+    plt.savefig("firstvisit_moves_BIG_double_correct_state_replay.png")
+    plt.show()
+    sn.heatmap(moves_visits, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray', cmap="YlGnBu")
+    plt.savefig("firstvisit_moves_BIG_double_correct_state_replay_visits.png")
+    plt.show()
+    print(moves)
 
-    # bj_agent = TablePlayerFull()
+    # bj_agent = TablePlayerNewRules()
     samples = 5 * 10 ** 5
     extras = 0
     good = 0

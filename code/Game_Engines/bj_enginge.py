@@ -1,6 +1,7 @@
 from typing import List
 from enum import Enum, auto
 from time import time
+import random
 
 from Models.RL.blackjack_simple import MCAgent
 from Models.RL.Envs.blackjack_splitting import BlackjackEnvSplit, sum_hand, usable_ace
@@ -62,12 +63,13 @@ class BlackjackEngine(BaseEngine):
         detected_player_hand = [1 if card[:-1] == "A" else card[:-1] for card in detected_player_hand]
         detected_card_pot = [1 if card[:-1] == "A" else card[:-1] for card in detected_card_pot]
         # for blackjack, we only need to check the hand each time a new card is drawn (either by us or the dealer)
-        if len(self.player_hand) != len(detected_player_hand) or len(self.dealer_hand) != len(detected_card_pot)\
-                or self.player_hand != detected_player_hand or self.dealer_hand != detected_card_pot: # for speed
+        if (len(self.player_hand) != len(detected_player_hand) or len(self.dealer_hand) != len(detected_card_pot)\
+                or self.player_hand != detected_player_hand or self.dealer_hand != detected_card_pot) \
+                and self.state != BJStates.DECIDING:  # for speed
             self.player_hand = detected_player_hand
             if detected_card_pot != self.dealer_hand:
                 self.dealer_hand = detected_card_pot
-                if self.state != BJStates.WAITING_FOR_DEALER and self.state != BJStates.RESETTING and self.state != BJStates.DECIDING:
+                if self.state != BJStates.WAITING_FOR_DEALER and self.state != BJStates.RESETTING:
                     print(f"Bad value for dealer detected.")
                     print("-"*75)
                     self.state = BJStates.RESETTING
@@ -89,6 +91,8 @@ class BlackjackEngine(BaseEngine):
                 # if there's no (new) detection, don't do anything yet (maybe the dealer is flushing the deck etc.)
                 return
             print(f"New hand.")
+            print(f"My cards are {self.player_hand}.")
+            print(f"Dealer cards are {self.dealer_hand}.")
             if self.splits_left > 0:
                 self.splits_left -= 1
             else:
@@ -116,7 +120,7 @@ class BlackjackEngine(BaseEngine):
             state = (splittable, sum_player, 10 if self.dealer_hand[0] in {"K", "Q", "J"}
                      else int(self.dealer_hand[0]), ace)
 
-            action = self.agent.getAction(state)
+            action = self.agent.get_action(state)
             if action == 0:  # STAND
                 print(f"I'm standing.")
                 print(f"My cards are {self.player_hand}.")
@@ -132,11 +136,22 @@ class BlackjackEngine(BaseEngine):
                 print(f"My cards are {self.player_hand}.")
                 print(f"Dealer cards are {self.dealer_hand}.")
                 self.state = BJStates.SPLITTING
-            elif action == 3:  # DOUBLE
-                print(f"Double")
+            elif action == 3:  # DOUBLE OR HIT
+                print(f"Double if allowed, otherwise hit")
                 print(f"My cards are {self.player_hand}.")
                 print(f"Dealer cards are {self.dealer_hand}.")
-                self.state = BJStates.DOUBLING
+                if len(self.player_hand) == 2:
+                    self.state = BJStates.DOUBLING
+                else:
+                    self.state = BJStates.HITTING
+            elif action == 4:  # DOUBLE OR STAND
+                print(f"Double if allowed, otherwise stand.")
+                print(f"My cards are {self.player_hand}.")
+                print(f"Dealer cards are {self.dealer_hand}.")
+                if len(self.player_hand) == 2:
+                    self.state = BJStates.DOUBLING
+                else:
+                    self.state = BJStates.WAITING_FOR_DEALER
             if self.splits_left > 0 and self.state == BJStates.WAITING_FOR_DEALER:
                 self.finished_time = time()
                 self.state = BJStates.RESETTING

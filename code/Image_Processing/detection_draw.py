@@ -1,4 +1,5 @@
 from typing import List, Optional, Dict, Tuple
+import time
 
 from PIL import Image, ImageDraw, ImageFont
 import torch
@@ -16,10 +17,6 @@ def draw_detection(img: Image.Image, detections: Dict[str, torch.Tensor], cards_
 
     img_copy = img.copy()
     draw_obj = ImageDraw.Draw(img_copy)
-    lm_p = None
-    bm_p = None
-    lm_c = None
-    bm_c = None
     font = ImageFont.truetype("../data/fonts/NotoSerifCJKjp-Medium.otf", 15)
     for idx, (box, label, score) in enumerate(zip(detections["boxes"], detections["labels"], detections["scores"])):
         x1, y1, x2, y2 = box.cpu().numpy()

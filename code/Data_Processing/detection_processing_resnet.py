@@ -67,27 +67,16 @@ def filter_under_thresh(detection: Dict[str, torch.Tensor]) -> None:
     bad_boxes = set()
     scores = detection["scores"]
     labels = detection["labels"]
+    good_idx = []
     # the boxes are already sorted according to scores
     for idx, score in enumerate(scores):
         if score < 0.75:
-            bad_boxes.add(str(boxes[idx])) # use boxes coordinates because they are the only unique property of bounding boxes
+            continue
+        good_idx.append(idx)
 
-    good_boxes = []
-    good_scores = []
-    good_labels = []
-    for box, score, label in zip(boxes, scores, labels):
-        if str(box) not in bad_boxes:
-            good_boxes.append(box)
-            good_scores.append(score)
-            good_labels.append(label)
-    if len(good_boxes) > 0:
-        detection["boxes"] = torch.stack(good_boxes)
-        detection["scores"] = torch.stack(good_scores)
-        detection["labels"] = torch.stack(good_labels)
-    else:
-        detection["boxes"] = torch.as_tensor([])
-        detection["scores"] = torch.as_tensor([])
-        detection["labels"] = torch.as_tensor([])
+    detection["boxes"] = detection["boxes"][good_idx]
+    detection["labels"] = detection["labels"][good_idx]
+    detection["scores"] = detection["scores"][good_idx]
 
 
 def filter_detections_by_game(game: str, detection: Dict[str, torch.Tensor]) -> None:

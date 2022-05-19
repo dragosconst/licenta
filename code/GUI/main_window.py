@@ -57,7 +57,7 @@ SEL_W = "selectw"
 
 # cards game specific constants
 # -----------------------------
-GAMES = ["Blackjack", "Poker Texas Hold'Em", "Razboi", "Macao", "Septica", "Solitaire"]
+GAMES = ["Blackjack", "Razboi", "Macao", "Septica"]
 current_game = None # type: str
 current_game_engine = None # type: BaseEngine
 
@@ -233,10 +233,18 @@ def apply_inplace_filters(dets) -> None:
 
     global current_game
 
+    under_thresh = time.time()
     filter_under_thresh(dets)
+    print(f"under thresh time is {time.time() - under_thresh:.4f}s")
+    bygame = time.time()
     filter_detections_by_game(current_game, dets)
+    print(f"by game time is {time.time() - bygame:.4f}s")
+    second_nms_time = time.time()
     second_nms(dets)
+    print(f"second nms time is {time.time() - second_nms_time:.4f}s")
+    fng = time.time()
     filter_non_group_detections(current_game, dets)
+    print(f"non group time is {time.time() - fng:.4f}s")
 
 
 def check_if_change_detections(dets) -> None:
@@ -272,15 +280,20 @@ def update_selected_window(model: torch.nn.Module):
 
     if not dpg.does_item_exist(CR_PROC_TEXT):
         return
+    full_time = time.time()
     w = dpg.get_value(CR_PROC_WH) if dpg.get_value(CR_PROC_WH) > 100 else 100
     h = dpg.get_value(CR_PROC_HH) if dpg.get_value(CR_PROC_HH) > 100 else 100
     x = dpg.get_value(CR_PROC_X)
     y = dpg.get_value(CR_PROC_Y)
+    grab_time = time.time()
     img, _ = grab_selected_window_contents(hwnd=selected_window_hwnd, w=w, h=h, x=x, y=y)
+    print(f"grabbing time is {time.time() - grab_time:.4f}s")
+    additional_stuff = time.time()
     img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
     img_tensor = torch.from_numpy(img[:, :, :3])
-    img = np.asarray(Image.fromarray(img).resize((FRCNN_W, FRCNN_H))) # resize to net dimensions
+    # img = np.asarray(Image.fromarray(img).resize((FRCNN_W, FRCNN_H))) # resize to net dimensions
     img_tensor = img_tensor.permute(2, 0, 1)
+    print(f"prep time is {time.time() - additional_stuff:.4f}s")
     shape = img_tensor.size()[1:]
     # img_tensor = torch.from_numpy(np.asarray(T.ToPILImage()(img_tensor).resize((1900, 1080))))
     # img_tensor = img_tensor.permute(2, 0, 1)
@@ -289,21 +302,37 @@ def update_selected_window(model: torch.nn.Module):
 
         img_tensor = T.ConvertImageDtype(torch.float32)(img_tensor)
         img_tensor = img_tensor.to("cuda")
+        det_time = time.time()
         detections = model(img_tensor.unsqueeze(0)) # act as batch of 1 x img_tensor
+        print(f"inference time is {time.time() - det_time:.4f} s.")
         dets = detections[0]
+        filter_time = time.time()
         apply_inplace_filters(dets)
+        print(f"in_place filter time is {time.time() - filter_time:.4f}s")
         cards_pot, player_hand = get_player_hand(current_game, dets)
         cards_pot, player_hand = filter_same_card(dets, cards_pot, player_hand)
         check_if_change_detections(dets)
+        print(f"filtering time is {time.time() - filter_time:.4f}s")
 
+    draw_time = time.time()
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets, cards_pot, player_hand)
+    print(f"drawing time is {time.time() - draw_time:.4f}s")
+    resize_time = time.time()
     img_pil = img_pil.resize((min(dpg.get_viewport_width(), FRCNN_W), min(dpg.get_viewport_height(), FRCNN_H)))
+    print(f"resize time is {time.time() - resize_time:.4f}s")
     # img_pil = img_pil.resize(shape[::-1])
-    img[:dpg.get_viewport_height(), :dpg.get_viewport_width(), :3] = np.asarray(img_pil)
+    copy_time = time.time()
+    img = np.asarray(img_pil)
+    img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
+    print(f"copy time is {time.time() - copy_time:.4f}")
     # img = np.power(img, [1.2, 1.03, 1.0, 1.0])
+    pygui_time = time.time()
     img = img.flatten().astype(np.float32)
     img_normalized = img / 255
     dpg.set_value(CR_PROC_TEXT, img_normalized)
+    print(f"pygui time is {time.time() - pygui_time:.4f}s")
+    print(f"full time is {time.time() - full_time:.4f}")
+    print("-"*140)
 
 
 def _restart_agent(sender, app_data, user_data):
@@ -320,14 +349,15 @@ def _restart_agent(sender, app_data, user_data):
     print(f"I'm working")
     _change_game(sender, current_game, user_data)
 
+
 def _change_active_window(sender, app_data, user_data):
     global CR_PROCESS, img_normalized, selected_window_title, selected_window_hwnd, CR_PROC_DIM, FRCNN_H, FRCNN_W, CR_PROC_X, CR_PROC_Y, CR_PROC_HH, CR_PROC_WH, \
            PLAYER_HAND, pleft, pright, ptop, pbot, CARDS_POT, cleft, cright, ctop, cbot, CR_PROC_AG_BUT
 
     if not dpg.does_item_exist(CR_PROCESS):
-        with dpg.window(tag=CR_PROCESS, width=FRCNN_W, height=FRCNN_H):
-            w = FRCNN_W
-            h = FRCNN_H
+        with dpg.window(tag=CR_PROCESS, width=dpg.get_viewport_width(), height=dpg.get_viewport_height()):
+            w = dpg.get_viewport_width()
+            h = dpg.get_viewport_height()
             selected_window_title = app_data
             img, selected_window_hwnd = grab_selected_window_contents(wName=selected_window_title, w=w, h=h)
             imc = img.copy()
@@ -357,7 +387,7 @@ def _change_game(sender, app_data, user_data):
 
     current_game = app_data
     if current_game == "Blackjack":
-        with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_state_replay.model", "rb") as f:
+        with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_new_action_space_fixed.model", "rb") as f:
             bj_agent = pickle.load(f)
         current_game_engine = BlackjackEngine(bj_agent=bj_agent)
 
