@@ -39,7 +39,8 @@ from Data_Processing.detection_processing_resnet import second_nms, filter_under
 from Image_Processing.detection_draw import draw_detection
 import Utils.trans as T
 
-def train_fccnn_reference(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_dataloader: torch.utils.data.DataLoader,
+
+def train_frcnn_reference(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_dataloader: torch.utils.data.DataLoader,
                           valid_dataloader: torch.utils.data.DataLoader,
                           lr_scheduler: torch.optim.lr_scheduler.MultiStepLR, device: str, num_epochs: int= 30,
                           start_from: int=None) -> None:
@@ -54,7 +55,7 @@ def train_fccnn_reference(model: torch.nn.Module, optimizer: torch.optim.Optimiz
         # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_slices_e" + str(epoch +
         #                                                                     (0 if start_from is None else start_from)) +
         #     ".pt")
-        torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_slices_e" + str(epoch +
+        torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_stretchedref_e" + str(epoch +
                                                                             (0 if start_from is None else start_from)) +
             ".pt")
 
@@ -81,7 +82,6 @@ def train_frcnn(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_
     moving_box_reg = deque(maxlen=7)
     moving_rpn_box_reg = deque(maxlen=7)
     for epoch in range(num_epochs):
-        torch.cuda.empty_cache()
         model.train()   # train mode
 
         full_loss = []
@@ -104,14 +104,13 @@ def train_frcnn(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_
             moving_obj.append(loss_dict['loss_objectness'])
             moving_rpn_box_reg.append(loss_dict['loss_rpn_box_reg'])
             if idx % print_freq == 0:
-                print(f"Loss at step [{idx}\\{len(train_dataloader)}] is: {loss_value:.4f}, loss_classifier: {sum(moving_class)/len(moving_class):.4f},"
+                print(f"Lr is {lr_scheduler.get_lr()}.")
+                print(f"Loss at step [{idx}\\{len(train_dataloader)}] is: {sum(moving_loss)/len(moving_loss):.4f}, loss_classifier: {sum(moving_class)/len(moving_class):.4f},"
                       f" loss_box_reg:{sum(moving_box_reg)/len(moving_box_reg):.4f}, loss_objectness: {sum(moving_obj)/len(moving_obj):.4f},"
                       f" loss_rpn_box_reg:{sum(moving_rpn_box_reg)/len(moving_rpn_box_reg):.4f}")
             if (idx + 1) % accumulate == 0:
                 optimizer.step()
                 optimizer.zero_grad()
-                if lr_scheduler is not None:
-                    lr_scheduler.step()
 
             if not math.isfinite(loss_value):
                 print(f"Loss is {loss_value}, stopping training")
@@ -119,9 +118,13 @@ def train_frcnn(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_
                 sys.exit(1)
         print(f"Loss after epoc {epoch} is {sum(full_loss)/len(full_loss)}.")
         validate(model, valid_dataloader, device)
-        torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_smol_e" + str(epoch +
+        torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_stretched_e" + str(epoch +
                                                                             (0 if start_from is None else start_from)) +
             ".pt")
+
+        if lr_scheduler is not None:
+            lr_scheduler.step()
+
 
 def initialize_frcnn(backbone: torch.nn.Module, cls: int, anchor_gen: AnchorGenerator=None, roi_pooler: MultiScaleRoIAlign=None,
                      image_mean: float=None, image_std: float=None, min_size: int=800,
@@ -132,6 +135,7 @@ def initialize_frcnn(backbone: torch.nn.Module, cls: int, anchor_gen: AnchorGene
     return FasterRCNN(backbone=backbone, num_classes=cls, rpn_anchor_generator=anchor_gen, box_roi_pool=roi_pooler,
                       image_mean=image_mean, image_std=image_std, min_size=min_size, max_size=max_size,
                       rpn_head=rpn_head)
+
 
 @torch.inference_mode()
 def validate(model: torch.nn.Module, valid_dataloader: torch.utils.data.DataLoader, device: str) -> None:
@@ -165,6 +169,7 @@ def validate(model: torch.nn.Module, valid_dataloader: torch.utils.data.DataLoad
     print(f"Precision is {true_positives / (true_positives + false_positives) if true_positives + false_positives != 0 else 0}.")
     print(f"Recall is {true_positives / total_len}.")
 
+
 def get_faster(model_path: str) -> torch.nn.Module:
     frcnn = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True).to("cuda")
     # frcnn = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn(pretrained=True).to("cuda")  # low res
@@ -175,6 +180,7 @@ def get_faster(model_path: str) -> torch.nn.Module:
     # frcnn.eval()
     frcnn.to("cuda")
     return frcnn
+
 
 # when running this script, train various nets
 if __name__ == "__main__":
@@ -213,7 +219,7 @@ if __name__ == "__main__":
     #             device="cuda", num_epochs=30)
 
     # frcnn.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_slices.pt"))
-    frcnn.load_state_dict(torch.load("/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_slices.pt"))
+    frcnn.load_state_dict(torch.load("/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_smol_e1.pt"))
     # frcnn.eval()
 
     frcnn.to("cuda")
@@ -227,6 +233,6 @@ if __name__ == "__main__":
     train_frcnn(frcnn, adam, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
                 device="cuda", num_epochs=7)
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_slices.pt")
-    torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_smol.pt")
+    torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_stretched.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\mobilenet_v3_320_large.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_custom.pt")

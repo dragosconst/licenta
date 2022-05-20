@@ -7,7 +7,8 @@ import torch
 import numpy as np
 import cv2 as cv
 
-class MyCompose(object):
+
+class MyCompose:
     def __init__(self, transforms):
         self.transforms = transforms
         self.debug_mode = transforms[0].debug
@@ -29,7 +30,8 @@ class MyCompose(object):
             return img, target, debug
         return img, target
 
-class RandomAffineBoxSensitive():
+
+class RandomAffineBoxSensitive:
     def __init__(self, degrees: Tuple[int, int]=(-1, 0), translate: Tuple[float, float]=(0.,0.)
                  ,scale: Union[float, Tuple[float, float]]=1., prob: float=0.5, debug: bool=False):
         self.degrees = degrees
@@ -168,7 +170,6 @@ class RandomAffineBoxSensitive():
         if "area" in target:
             target["area"] = target["area"][good_indices]
 
-
         # area has obviously changed after the transforms, so we need to recalculate it
         if "area" in target:
             for idx, box in enumerate(target["boxes"]):
@@ -178,7 +179,8 @@ class RandomAffineBoxSensitive():
             return image, target, debug_boxes
         return image, target
 
-class RandomPerspectiveBoxSensitive():
+
+class RandomPerspectiveBoxSensitive:
     def __init__(self, dist_scale: float, prob: float=0.5, debug: bool=False):
         self.distortion_scale = dist_scale
         self.prob = prob
@@ -244,7 +246,8 @@ class RandomPerspectiveBoxSensitive():
             return image, target, debug_boxes
         return image, target
 
-class RandomColorJitterBoxSensitive():
+
+class RandomColorJitterBoxSensitive:
     def __init__(self, brightness: float=0, contrast: float=0, saturation: float=0, hue: float=0,
                  prob: float=0.5, debug: bool=False):
         self.brightness = brightness
@@ -285,7 +288,76 @@ class RandomColorJitterBoxSensitive():
         return image, target
 
 
-class RandomGaussianNoise():
+class RandomStretch:
+    def __init__(self, sx: Tuple[float, float], sy: Tuple[float, float], prob: float=0.5):
+        self.sx = sx
+        self.sy = sy
+        self.prob = prob
+        self.debug = False
+
+    def __call__(self, image, target, debug: List=None):
+        if random.random() > self.prob:
+            if self.debug:
+                if debug is not None:
+                    return image, target, debug
+                debug_boxes = []
+                for box in target["boxes"]:
+                    x1, y1, x2, y2 = box
+                    debug_boxes.append([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
+                return image, target, debug_boxes
+            return image, target
+        if self.debug:
+            debug_boxes = []
+
+        *_, h, w = image.shape
+        if random.random() <= 0.5:
+            smin, smax = self.sx
+            scale_f = torch.rand(1).item()
+            scalex = (1 - scale_f) * smin + scale_f * smax
+            scaley = 1
+            image = F.resize(img=image, size=[int(h), int(w * scalex)])
+            nh, nw = h, w * scalex
+        else:
+            smin, smax = self.sy
+            scale_f = torch.rand(1).item()
+            scalex = 1
+            scaley = (1 - scale_f) * smin + scale_f * smax
+            image = F.resize(img=image, size=[int(h * scaley), int(w)])
+            nh, nw = h * scaley, w
+        good_indices = []
+        good_boxes = []
+        for idx, box in enumerate(target["boxes"]):
+            x1, y1, x2, y2 = box
+            left = x1 * scalex
+            top = y1 * scaley
+            right = x2 * scalex
+            bot = y2 * scaley
+
+
+            if self.debug:
+                if debug is None:
+                    debug_boxes.append([(left, top), (right, top), (right, bot), (left, bot)])
+                else:
+                    points = debug[idx]
+                    # points = cv.perspectiveTransform(np.asarray([points]), perspTransform)
+                    debug_boxes.append(points)
+            good_boxes.append(torch.as_tensor((left, top, right, bot)))
+            good_indices.append(idx)
+        target["boxes"] = good_boxes
+        if type(target["boxes"]) == list and len(target["boxes"]) > 0:
+            target["boxes"] = torch.stack(target["boxes"])
+        elif len(target["boxes"]) == 0:
+            target["boxes"] = torch.zeros((0, 4), dtype=torch.float32)
+        if "labels" in target:
+            target["labels"] = target["labels"][good_indices]
+        if "area" in target:
+            target["area"] = target["area"][good_indices]
+        if self.debug:
+            return image, target, debug_boxes
+        return image, target
+
+
+class RandomGaussianNoise:
     def __init__(self, mean: float=0, var: float=1, prob: float=0.5, debug: bool=False):
         self.mean = mean
         self.var = var

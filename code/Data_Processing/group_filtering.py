@@ -112,7 +112,7 @@ def get_player_hand(game: str, detections: Dict[str, torch.Tensor]) -> Union[Tup
         return np.sqrt((x2c - x1c) ** 2 + (y2c - y1c) ** 2)
 
 
-    RADIUS = 300
+    RADIUS = 270
     gr_no = 0
     groups = {}
     # create the group indexes from the filtered detections

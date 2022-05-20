@@ -104,6 +104,12 @@ class BlackjackEngine(BaseEngine):
         elif self.state == BJStates.THINKING:
             # we end up in this state whenever we need to take a new decision
             splittable = None
+            if sum_hand(self.player_hand) > 21:
+                print(f"Busted.")
+                self.total_losses += 1
+                self.finished_time = time()
+                self.state = BJStates.RESETTING
+                return
             if len(self.player_hand) == 2 and self.player_hand[0] == self.player_hand[1]:
                 splittable = 10 if self.player_hand[0] in {"K", "Q", "J"} else int(self.player_hand[0])
             sum_player = sum_hand(self.player_hand)

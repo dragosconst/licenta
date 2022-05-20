@@ -33,6 +33,8 @@ def second_nms(detection: Dict[str, torch.Tensor]) -> None:
     # the boxes are already sorted according to scores
     for idx, box in enumerate(boxes):
         for box2 in boxes[idx+1:]:
+            if str(box2) in bad_boxes:
+                continue
             if iou(box, box2) >= 0.3:
                 bad_boxes.add(str(box2))
     good_boxes = []
@@ -105,26 +107,15 @@ def filter_detections_by_game(game: str, detection: Dict[str, torch.Tensor]) -> 
     bad_boxes = set()
     scores = detection["scores"]
     labels = detection["labels"]
+    good_idx = []
     for idx, (box, label, score) in enumerate(zip(boxes, labels, scores)):
         if label in bad_labels:
-            bad_boxes.add(str(boxes[idx])) # use boxes coordinates because they are the only unique property of bounding boxes
+            continue
+        good_idx.append(idx)
 
-    good_boxes = []
-    good_scores = []
-    good_labels = []
-    for box, score, label in zip(boxes, scores, labels):
-        if str(box) not in bad_boxes:
-            good_boxes.append(box)
-            good_scores.append(score)
-            good_labels.append(label)
-    if len(good_boxes) > 0:
-        detection["boxes"] = torch.stack(good_boxes)
-        detection["scores"] = torch.stack(good_scores)
-        detection["labels"] = torch.stack(good_labels)
-    else:
-        detection["boxes"] = torch.as_tensor([])
-        detection["scores"] = torch.as_tensor([])
-        detection["labels"] = torch.as_tensor([])
+    detection["boxes"] = detection["boxes"][good_idx]
+    detection["labels"] = detection["labels"][good_idx]
+    detection["scores"] = detection["scores"][good_idx]
 
 
 def filter_non_group_detections(game: str, detections: Dict[str, torch.Tensor]) -> None:
@@ -191,3 +182,20 @@ def filter_non_group_detections(game: str, detections: Dict[str, torch.Tensor]) 
     detections["boxes"] = detections["boxes"][good_indices]
     detections["labels"] = detections["labels"][good_indices]
     detections["scores"] = detections["scores"][good_indices]
+
+
+def filter_small(detection: Dict[str, torch.Tensor]) -> None:
+    boxes = detection["boxes"]
+    scores = detection["scores"]
+    labels = detection["labels"]
+
+    good_idx = []
+    too_small = 1.4 * 10 ** 3
+    for idx, box in enumerate(boxes):
+        x1, y1, x2, y2 = box
+        if (x2 - x1) * (y2 - y1) < too_small:
+            continue
+        good_idx.append(idx)
+    detection["boxes"] = detection["boxes"][good_idx]
+    detection["labels"] = detection["labels"][good_idx]
+    detection["scores"] = detection["scores"][good_idx]

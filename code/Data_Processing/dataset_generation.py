@@ -13,7 +13,8 @@ from torchvision.utils import draw_bounding_boxes
 from tqdm import tqdm
 
 from Utils.file_utils import get_image_files, get_random_bg_img, get_random_img, load_img_and_xml, MAX_IM_SIZE
-from Utils.trans import RandomAffineBoxSensitive, RandomPerspectiveBoxSensitive, MyCompose, RandomColorJitterBoxSensitive, RandomGaussianNoise
+from Utils.trans import RandomAffineBoxSensitive, RandomPerspectiveBoxSensitive, MyCompose, RandomColorJitterBoxSensitive, RandomGaussianNoise, \
+                        RandomStretch
 from Data_Processing.Raw_Train_Data.raw import parse_xml, possible_classes, pos_cls_inverse
 """
 Generate a dataset of a certain size from a given dataset of cropped cards and another dataset of random backgrounds.
@@ -23,6 +24,7 @@ Generate a dataset of a certain size from a given dataset of cropped cards and a
 IM_HEIGHT = 540
 IM_WIDTH = 950
 SQ_2 = 1.414
+
 
 def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, Dict[str, torch.Tensor]]:
     """
@@ -37,17 +39,18 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
 
     card_masks = []
     transforms = MyCompose(
-       (RandomGaussianNoise(mean=0., var=0.07, prob=0.9),
+       (#RandomGaussianNoise(mean=0., var=0.07, prob=0.9),
         RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
-        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.5, 1.5), prob=0.6),
+        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.9, 1.1), prob=0.6),
         RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3))
     )
     transforms_digital = MyCompose(
-       (RandomGaussianNoise(mean=0., var=1e-6, prob=0.9),
+       (#RandomGaussianNoise(mean=0., var=1e-6, prob=0.9),
         RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
-        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.5, 1.5), prob=0.6),
+        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.9, 1.1), prob=0.6),
         RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3))
     )
+
     # create the card masks, they will be a couple of black images with cards on them after various transforms
     for (img, data) in cards:
         img_full = np.zeros((IM_HEIGHT, IM_WIDTH, 4), dtype=np.uint8)
@@ -58,7 +61,7 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
         imw, imh = img.size
         img = np.asarray(img, dtype=np.uint8)
         padding[(PAD_SIZE-imh)//2:(PAD_SIZE-imh)//2+imh,
-        (PAD_SIZE-imw)//2:(PAD_SIZE-imw)//2+imw, :3] = img
+        (PAD_SIZE-imw)//2:(PAD_SIZE-imw)//2+imw, :3] = img[:, :, :3]
         # create image mask
         for i, line in enumerate(padding[(PAD_SIZE-imh)//2:(PAD_SIZE-imh)//2+imh]):
             for j, cell in enumerate(line[(PAD_SIZE-imw)//2:(PAD_SIZE-imw)//2+imw]):
@@ -83,8 +86,9 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
         boxes = data["boxes"]   
         new_boxes = []
         good_idx = []
-        x = torch.randint(low=20, high=IM_WIDTH - PAD_SIZE//2, size=(1,)).item()
-        y = torch.randint(low=20, high=IM_HEIGHT - PAD_SIZE//2, size=(1,)).item()
+        h, w, *_ = padding.shape
+        x = torch.randint(low=20, high=IM_WIDTH - w//2, size=(1,)).item()
+        y = torch.randint(low=20, high=IM_HEIGHT - h//2, size=(1,)).item()
         for idx, box in enumerate(boxes):
             x1, y1, x2, y2 = box
             if x1 + x >= IM_WIDTH or y1 + y >= IM_HEIGHT or x2 + x - IM_WIDTH >= IM_WIDTH - x1 - x or \
@@ -102,9 +106,9 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
             data["boxes"] = torch.as_tensor([])
         data["labels"] = data["labels"][good_idx]
         # for the case in which the entire padding image can't fully fit in the image
-        x_crop = min(x + PAD_SIZE, IM_WIDTH) - x
-        y_crop = min(y + PAD_SIZE, IM_HEIGHT) - y
-        img_full[y:y+PAD_SIZE, x:x+PAD_SIZE, :] = padding[:y_crop, :x_crop, :]
+        x_crop = min(x + w, IM_WIDTH) - x
+        y_crop = min(y + h, IM_HEIGHT) - y
+        img_full[y:y+y_crop, x:x+x_crop, :] = padding[:y_crop, :x_crop, :]
         img_full = Image.fromarray(img_full)
 
         card_masks.append((img_full, data))
@@ -160,6 +164,7 @@ def choose_cut_on_prev(prev_cut: str) -> str:
     elif prev_cut == "d4":
         return random.choice(["v1", "h1"])
 
+
 def transform_coords(diag: str, a: float, x: int, side_len: int) -> float:
     if diag == "d1":
         return (x/side_len) / (2*(1-a)) - a/(2*(1-a))
@@ -169,6 +174,7 @@ def transform_coords(diag: str, a: float, x: int, side_len: int) -> float:
         return (x/side_len)/(2*a) + 1/2
     elif diag == "d4":
         return -(x/side_len)/(2*a) + 1/2
+
 
 def perform_cut(full_img, cut: str, bbox: List[int]):
     x1, y1, x2, y2 = np.asarray(bbox, dtype=np.int64)
@@ -201,6 +207,7 @@ def perform_cut(full_img, cut: str, bbox: List[int]):
                     continue
                 full_img[y, x, :3] = np.random.randint(0, 256) # remove masks
     return full_img
+
 
 def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, Dict[str, torch.Tensor]]:
     """
@@ -335,6 +342,7 @@ def generate_handlike_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image,
         final_targets["labels"] = torch.Tensor([])
     return bg_image, final_targets
 
+
 def write_annotation(fp: str, name: str, shape: Tuple[int, int], data: Dict[str, torch.Tensor]) -> None:
     """
     Write data dictionary to output xml file
@@ -389,7 +397,7 @@ def write_annotation(fp: str, name: str, shape: Tuple[int, int], data: Dict[str,
 
 
 def gen_dataset_from_dir(root_dir: str, dest_dir: str, num_datasets: int, prob_datasets: List[float],
-                         cards_to_ignore: List[int]=None, start_from: int=0, num_imgs: int=10**4) -> None:
+                         cards_to_ignore: List[int]=None, start_from: int=0, num_imgs: int=10**4, stretch: bool=False) -> None:
     """
     Generate a dataset using images from root dir and writing them to dest_dir. It is assumed a dataset contains all 54
     classes, with the possible exception of red Joker.
@@ -441,7 +449,7 @@ def gen_dataset_from_dir(root_dir: str, dest_dir: str, num_datasets: int, prob_d
                                                                                          + ".jpg")):
                 card = possible_classes["JOKER_black"]
 
-            img, targets = load_img_and_xml(root_dir, pos_cls_inverse[card].lower() + dataset)
+            img, targets = load_img_and_xml(root_dir, pos_cls_inverse[card].lower() + dataset, stretched=stretch)
             cards.append((img, targets))
 
         # get the background image
@@ -601,5 +609,5 @@ def resize_dataset(root_dir: str, dest_dir: str, res_factor: float) -> None:
 if __name__ == "__main__":
     # dataset_statistics("../../data/my_stuff_augm/testing/")
     # resize_dataset("../../data/RAW/my-stuff-cropped/", "../../data/RAW/my-stuff-cropped-res/", 0.3)
-    gen_dataset_from_dir("../../data/RAW/my-stuff-cropped-res/", "../../data/my_stuff_augm/lifelike/", num_datasets=2,
-                         prob_datasets=[0.7, 0.3], num_imgs=2* 10 ** 4, start_from=7 * 10 **4)
+    gen_dataset_from_dir("../../data/RAW/PNG-cards-1.3/PNG-cards-1.3/", "../../data/my_stuff_augm/stretched/", num_datasets=1,
+                         prob_datasets=[1.], num_imgs=1 * 10**4, start_from=11 * 10 **4, stretch=True)
