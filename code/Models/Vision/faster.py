@@ -118,7 +118,7 @@ def train_frcnn(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_
                 sys.exit(1)
         print(f"Loss after epoc {epoch} is {sum(full_loss)/len(full_loss)}.")
         validate(model, valid_dataloader, device)
-        torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_stretched_e" + str(epoch +
+        torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_smol_e" + str(epoch +
                                                                             (0 if start_from is None else start_from)) +
             ".pt")
 
@@ -219,7 +219,7 @@ if __name__ == "__main__":
     #             device="cuda", num_epochs=30)
 
     # frcnn.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_slices.pt"))
-    frcnn.load_state_dict(torch.load("/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_smol_e1.pt"))
+    frcnn.load_state_dict(torch.load("/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_stretched_e1.pt"))
     # frcnn.eval()
 
     frcnn.to("cuda")
@@ -233,6 +233,6 @@ if __name__ == "__main__":
     train_frcnn(frcnn, adam, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
                 device="cuda", num_epochs=7)
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_slices.pt")
-    torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_stretched.pt")
+    torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_smol.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\mobilenet_v3_320_large.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_custom.pt")

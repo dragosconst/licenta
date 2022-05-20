@@ -48,8 +48,8 @@ SC_WH = "dimwh"
 SC_HH = "dimhh"
 SC_STDW = 800
 SC_STDH = 600
-FRCNN_W = 1900
-FRCNN_H = 1080
+FRCNN_W = 1900 * 2
+FRCNN_H = 1080 * 2
 SC_X = "posx"
 SC_Y = "posy"
 SC_W = "screencw"
@@ -65,6 +65,7 @@ current_game_engine = None # type: BaseEngine
 # image and net specific constants
 # --------------------------------
 img_normalized = None
+img_normalized_not_flattened = None
 video_capture = None
 UPDATE_DETECTIONS_RATE = 400 # ms interval at which to update our detections, used to avoid slowing down the program too much
 last_camera_update = 0
@@ -270,7 +271,7 @@ def check_if_change_detections(dets) -> None:
 @torch.inference_mode()
 def update_selected_window(model: torch.nn.Module):
     global selected_window_hwnd, img_normalized, last_camera_update, UPDATE_DETECTIONS_RATE, dets, CR_PROC_Y, CR_PROC_X, CR_PROC_HH, CR_PROC_WH,\
-    current_game, cards_pot, player_hand
+    current_game, cards_pot, player_hand, img_normalized_not_flattened
 
     if not dpg.does_item_exist(CR_PROC_TEXT):
         return
@@ -300,14 +301,19 @@ def update_selected_window(model: torch.nn.Module):
         check_if_change_detections(dets)
 
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets, cards_pot, player_hand)
-    img_pil = img_pil.resize((min(dpg.get_viewport_width(), FRCNN_W), min(dpg.get_viewport_height(), FRCNN_H)))
+
+    h = dpg.get_viewport_height()
+    w = dpg.get_viewport_width()
+    img_pil = img_pil.resize((w, h))
     # img_pil = img_pil.resize(shape[::-1])
     img = np.asarray(img_pil)
-    img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
+    # img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
     # img = np.power(img, [1.2, 1.03, 1.0, 1.0])
-    img = img.flatten().astype(np.float32)
-    img_normalized = img / 255
-    dpg.set_value(CR_PROC_TEXT, img_normalized)
+    img = img.astype(np.float32)
+    img_normalized_not_flattened[:h, :w] = img[:, :] / 255
+    # img_normalized = img_normalized_not_flattened.flatten() / 255
+    dpg.configure_item(CR_PROCESS, width=w, height=h)
+    dpg.set_value(CR_PROC_TEXT, img_normalized_not_flattened)
 
 
 def _restart_agent(sender, app_data, user_data):
@@ -327,27 +333,29 @@ def _restart_agent(sender, app_data, user_data):
 
 def _change_active_window(sender, app_data, user_data):
     global CR_PROCESS, img_normalized, selected_window_title, selected_window_hwnd, CR_PROC_DIM, FRCNN_H, FRCNN_W, CR_PROC_X, CR_PROC_Y, CR_PROC_HH, CR_PROC_WH, \
-           PLAYER_HAND, pleft, pright, ptop, pbot, CARDS_POT, cleft, cright, ctop, cbot, CR_PROC_AG_BUT
+           PLAYER_HAND, pleft, pright, ptop, pbot, CARDS_POT, cleft, cright, ctop, cbot, CR_PROC_AG_BUT, img_normalized_not_flattened
 
     if not dpg.does_item_exist(CR_PROCESS):
         with dpg.window(tag=CR_PROCESS, width=dpg.get_viewport_width(), height=dpg.get_viewport_height()):
-            w = dpg.get_viewport_width()
-            h = dpg.get_viewport_height()
+            w = FRCNN_W
+            h = FRCNN_H
             selected_window_title = app_data
-            img, selected_window_hwnd = grab_selected_window_contents(wName=selected_window_title, w=w, h=h)
-            imc = img.copy()
+            img, selected_window_hwnd = grab_selected_window_contents(wName=selected_window_title, w=dpg.get_viewport_width(), h=dpg.get_viewport_height())
+            img_normalized_not_flattened = np.zeros((h, w, 3), dtype=np.float32)
+            img_normalized_not_flattened[:img.shape[0], :img.shape[1], :3] = img.astype(np.float32) / 255
+            # img = img.flatten().astype(np.float32)
             # img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
-            img = img.flatten().astype(np.float32)
-            img_normalized = img / 255
+            # img = img.flatten().astype(np.float32)
             dpg.add_button(label="Restart Agent", tag=CR_PROC_AG_BUT, callback=_restart_agent)
             with dpg.texture_registry(show=False):
-                dpg.add_raw_texture(w, h, img_normalized, tag=CR_PROC_TEXT)
+                dpg.add_raw_texture(width=w, height=h, default_value=img_normalized_not_flattened, tag=CR_PROC_TEXT,
+                                    format=dpg.mvFormat_Float_rgb)
             dpg.add_image(CR_PROC_TEXT)
         dpg.show_item(CR_PROCESS)
     if not dpg.does_item_exist(CR_PROC_DIM):
         with dpg.window(tag=CR_PROC_DIM):
-            w = FRCNN_W
-            h = FRCNN_H
+            w = 1980
+            h = 1080
             x = 0
             y = 0
             dpg.add_slider_int(label="Width", tag=CR_PROC_WH, default_value=w, min_value=100, max_value=2000)
