@@ -30,7 +30,7 @@ MAIN_WINDOW = "Main"
 CAM_W = "cameraw"
 CAM_C = "cameracanny"
 DEBUG_STATE = True
-MW_W = 1000
+MW_W = 1100
 MW_H = 630
 FS = 60
 CR_PROCESS = "cr_proc"
@@ -46,10 +46,12 @@ CAM_C_IMG = "cam_c_img"
 DIM_W = "dimw"
 SC_WH = "dimwh"
 SC_HH = "dimhh"
+SAME_CARD = "samecard"
+DET_NO = "detno"
 SC_STDW = 800
 SC_STDH = 600
-FRCNN_W = 1900 * 2
-FRCNN_H = 1080 * 2
+FRCNN_W = 1900 // 2
+FRCNN_H = 1080 // 2
 SC_X = "posx"
 SC_Y = "posy"
 SC_W = "screencw"
@@ -64,7 +66,7 @@ current_game_engine = None # type: BaseEngine
 
 # image and net specific constants
 # --------------------------------
-img_normalized = None
+IMG_TAG = None
 img_normalized_not_flattened = None
 video_capture = None
 UPDATE_DETECTIONS_RATE = 400 # ms interval at which to update our detections, used to avoid slowing down the program too much
@@ -79,7 +81,9 @@ last_card_pot = []
 DET_ROW_THRES = 2
 cards_pot = []
 cards_pot_labels = []
+cards_prefix = []
 player_hand = []
+player_prefix = []
 player_hand_labels = []
 
 
@@ -136,19 +140,19 @@ def _release_video_capture(sender, app_data, user_data):
 
 
 def _capture_camera(sender, app_data, user_data):
-    global video_capture, img_normalized
+    global video_capture, IMG_TAG
     if not dpg.does_item_exist(CAM_W):
         video_capture = cv.VideoCapture(0)
         ret, frame = video_capture.read()
         img_data = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         img_data = img_data.flatten().astype(np.float32)
-        img_normalized = img_data / 255
+        IMG_TAG = img_data / 255
         frame_width = video_capture.get(cv.CAP_PROP_FRAME_WIDTH)
         frame_height = video_capture.get(cv.CAP_PROP_FRAME_HEIGHT)
 
         with dpg.window(tag=CAM_W, on_close=_release_video_capture, label="Camera"):
             with dpg.texture_registry(show=False):
-                dpg.add_raw_texture(frame_width, frame_height, img_normalized, tag=CAM_W_IMG, format=dpg.mvFormat_Float_rgb)
+                dpg.add_raw_texture(frame_width, frame_height, IMG_TAG, tag=CAM_W_IMG, format=dpg.mvFormat_Float_rgb)
             dpg.add_image(CAM_W_IMG)
     else:
         video_capture.open(0)
@@ -157,7 +161,7 @@ def _capture_camera(sender, app_data, user_data):
 
 @torch.inference_mode()
 def update_screen_area(model: torch.nn.Module):
-    global last_camera_update, UPDATE_DETECTIONS_RATE, dets, cards_pot, player_hand, img_normalized
+    global last_camera_update, UPDATE_DETECTIONS_RATE, dets, cards_pot, player_hand, IMG_TAG
 
     if not dpg.does_item_exist(DIM_W) or not dpg.is_item_visible(DIM_W):
         return
@@ -193,12 +197,12 @@ def update_screen_area(model: torch.nn.Module):
     # img[:, :, :3] = np.asarray(img_pil)
     # img = cv.resize(img, (SC_STDW, SC_STDH))
     img = img.flatten().astype(np.float32)
-    img_normalized = img / 255
-    dpg.set_value(SC_C, img_normalized)
+    IMG_TAG = img / 255
+    dpg.set_value(SC_C, IMG_TAG)
 
 
 def _get_screen_area():
-    global img_normalized
+    global IMG_TAG
 
     if not dpg.does_item_exist(DIM_W):
         with dpg.window(tag=SC_W, width=FRCNN_W, height=FRCNN_H, label="Screen Capture"):
@@ -212,8 +216,8 @@ def _get_screen_area():
                 img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
                 # img = cv.resize(img, (SC_STDW, SC_STDH))
                 img = img.flatten().astype(np.float32)
-                img_normalized = img / 255
-                dpg.add_raw_texture(w, h, img_normalized, tag=SC_C, format=dpg.mvFormat_Float_rgba)
+                IMG_TAG = img / 255
+                dpg.add_raw_texture(w, h, IMG_TAG, tag=SC_C, format=dpg.mvFormat_Float_rgba)
             with dpg.window(tag=DIM_W, label="Dimensions"):
                 dpg.add_slider_int(label="Width", tag=SC_WH, default_value=1900, min_value=100, max_value=2000)
                 dpg.add_slider_int(label="Height", tag=SC_HH, default_value=1080, min_value=100, max_value=2000)
@@ -251,26 +255,27 @@ def check_if_change_detections(dets) -> None:
     :return: nothing
     """
     global last_player_hand, last_card_pot, same_cp_in_a_row, same_ph_in_a_row, DET_ROW_THRES, cards_pot, \
-           player_hand, player_hand_labels, cards_pot_labels
+           player_hand, player_hand_labels, cards_pot_labels, player_prefix, cards_prefix
 
-    fcp, fph, last_card_pot, last_player_hand = compare_detections(last_card_pot, last_player_hand, cards_pot,
-                                                                   player_hand, dets)
+    fcp, fph, cards_prefix, player_prefix, last_card_pot, last_player_hand = compare_detections(last_card_pot, last_player_hand, cards_pot,
+                                                                   player_hand, dets, player_prefix, cards_prefix)
     same_ph_in_a_row = 1 if fph < 0 else same_ph_in_a_row + 1
     same_cp_in_a_row = 1 if fcp < 0 else same_cp_in_a_row + 1
+    det_row_thresh = dpg.get_value(DET_NO)
 
-    if same_ph_in_a_row >= DET_ROW_THRES:
-        player_hand_labels = last_player_hand
-        # if same_ph_in_a_row == DET_ROW_THRES:
+    if same_ph_in_a_row >= det_row_thresh:
+        player_hand_labels = player_prefix
+        # if same_ph_in_a_row == det_row_thresh:
         #     print(f"I think hand is {[pos_cls_inverse[l] for l in player_hand_labels]}")
-    if same_cp_in_a_row >= DET_ROW_THRES:
-        cards_pot_labels = last_card_pot
-        # if same_cp_in_a_row == DET_ROW_THRES:
+    if same_cp_in_a_row >= det_row_thresh:
+        cards_pot_labels = cards_prefix
+        # if same_cp_in_a_row == det_row_thresh:
         #     print(f"I think card pot is {[pos_cls_inverse[l] for l in cards_pot_labels]}")
 
 
 @torch.inference_mode()
 def update_selected_window(model: torch.nn.Module):
-    global selected_window_hwnd, img_normalized, last_camera_update, UPDATE_DETECTIONS_RATE, dets, CR_PROC_Y, CR_PROC_X, CR_PROC_HH, CR_PROC_WH,\
+    global selected_window_hwnd, IMG_TAG, last_camera_update, UPDATE_DETECTIONS_RATE, dets, CR_PROC_Y, CR_PROC_X, CR_PROC_HH, CR_PROC_WH,\
     current_game, cards_pot, player_hand, img_normalized_not_flattened
 
     if not dpg.does_item_exist(CR_PROC_TEXT):
@@ -297,14 +302,16 @@ def update_selected_window(model: torch.nn.Module):
         dets = detections[0]
         apply_inplace_filters(dets)
         cards_pot, player_hand = get_player_hand(current_game, dets)
-        cards_pot, player_hand = filter_same_card(dets, cards_pot, player_hand)
+        suppress_same = dpg.get_value(SAME_CARD)
+        if suppress_same:
+            cards_pot, player_hand = filter_same_card(dets, cards_pot, player_hand)
         check_if_change_detections(dets)
 
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets, cards_pot, player_hand)
 
     h = dpg.get_viewport_height()
     w = dpg.get_viewport_width()
-    img_pil = img_pil.resize((w, h))
+    img_pil = img_pil.resize((FRCNN_W, FRCNN_H))
     # img_pil = img_pil.resize(shape[::-1])
     img = np.asarray(img_pil)
     # img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
@@ -314,6 +321,7 @@ def update_selected_window(model: torch.nn.Module):
     # img_normalized = img_normalized_not_flattened.flatten() / 255
     dpg.configure_item(CR_PROCESS, width=w, height=h)
     dpg.set_value(CR_PROC_TEXT, img_normalized_not_flattened)
+    dpg.configure_item(IMG_TAG, texture_tag=CR_PROC_TEXT, pmin=(0, 70), pmax=(w - 20, h - 110), parent=CR_PROCESS)
 
 
 def _restart_agent(sender, app_data, user_data):
@@ -332,7 +340,7 @@ def _restart_agent(sender, app_data, user_data):
 
 
 def _change_active_window(sender, app_data, user_data):
-    global CR_PROCESS, img_normalized, selected_window_title, selected_window_hwnd, CR_PROC_DIM, FRCNN_H, FRCNN_W, CR_PROC_X, CR_PROC_Y, CR_PROC_HH, CR_PROC_WH, \
+    global CR_PROCESS, IMG_TAG, selected_window_title, selected_window_hwnd, CR_PROC_DIM, FRCNN_H, FRCNN_W, CR_PROC_X, CR_PROC_Y, CR_PROC_HH, CR_PROC_WH, \
            PLAYER_HAND, pleft, pright, ptop, pbot, CARDS_POT, cleft, cright, ctop, cbot, CR_PROC_AG_BUT, img_normalized_not_flattened
 
     if not dpg.does_item_exist(CR_PROCESS):
@@ -340,7 +348,7 @@ def _change_active_window(sender, app_data, user_data):
             w = FRCNN_W
             h = FRCNN_H
             selected_window_title = app_data
-            img, selected_window_hwnd = grab_selected_window_contents(wName=selected_window_title, w=dpg.get_viewport_width(), h=dpg.get_viewport_height())
+            img, selected_window_hwnd = grab_selected_window_contents(wName=selected_window_title, w=w, h=h)
             img_normalized_not_flattened = np.zeros((h, w, 3), dtype=np.float32)
             img_normalized_not_flattened[:img.shape[0], :img.shape[1], :3] = img.astype(np.float32) / 255
             # img = img.flatten().astype(np.float32)
@@ -350,7 +358,7 @@ def _change_active_window(sender, app_data, user_data):
             with dpg.texture_registry(show=False):
                 dpg.add_raw_texture(width=w, height=h, default_value=img_normalized_not_flattened, tag=CR_PROC_TEXT,
                                     format=dpg.mvFormat_Float_rgb)
-            dpg.add_image(CR_PROC_TEXT)
+            IMG_TAG = dpg.draw_image(CR_PROC_TEXT, pmin=(0, 0), pmax=(dpg.get_viewport_width(), dpg.get_viewport_height()))
         dpg.show_item(CR_PROCESS)
     if not dpg.does_item_exist(CR_PROC_DIM):
         with dpg.window(tag=CR_PROC_DIM):
@@ -376,16 +384,13 @@ def _change_game(sender, app_data, user_data):
 
 
 def update_agent():
-    global current_game_engine, cards_pot, player_hand, dets
+    global current_game_engine, cards_pot, player_hand, dets, player_hand_labels, cards_pot_labels
 
     if current_game_engine is None or "labels" not in dets:
         return
-    labels = dets["labels"]
-    player_labels = labels[player_hand].cpu().numpy()
-    player_labels = [pos_cls_inverse[l] for l in player_labels]
-    card_labels = labels[cards_pot].cpu().numpy()
-    card_labels = [pos_cls_inverse[l] for l in card_labels]
-    current_game_engine.update_detections(player_labels, card_labels)
+    player_labels_str = [pos_cls_inverse[l] for l in player_hand_labels]
+    card_labels_str = [pos_cls_inverse[l] for l in cards_pot_labels]
+    current_game_engine.update_detections(player_labels_str, card_labels_str)
     current_game_engine.act()
 
 
@@ -400,9 +405,11 @@ def create_main_window(font):
         dpg.add_button(label="Select screen area", width=MW_W, height=MW_H // 4, callback=_get_screen_area)
         win_names = grab_all_open_windows()
         print(win_names)
+        dpg.add_checkbox(label="Suppress same card", tag=SAME_CARD, default_value=True)
+        dpg.add_input_int(label="Chain detections to change hands", width=200, tag=DET_NO, default_value=2)
         dpg.add_combo(label="Select window", tag=SEL_W, items=win_names, width=MW_W // 2,
                       callback=_change_active_window)
-        dpg.add_combo(label="Select game", items=GAMES, callback=_change_game)
+        dpg.add_combo(label="Select game", items=GAMES, width=MW_W // 2, callback=_change_game)
         dpg.add_button(label="Debug mode:ON", width=MW_W, height=MW_H // 4, tag="Debug", callback=_change_debug_text, user_data="Debug")
         dpg.bind_font(font)
 
