@@ -21,6 +21,9 @@ from Data_Processing.extra_filters import filter_same_card
 from Data_Processing.frame_hand_detection import compare_detections
 from Game_Engines.bj_enginge import BlackjackEngine
 from Game_Engines.base_engine import BaseEngine
+from Game_Engines.septica_engine import SepticaEngine
+from Models.RL.septica_agent import get_septica_agent
+from Models.RL.Envs.septica import SepticaEnv
 
 # window names and other constants
 
@@ -31,7 +34,7 @@ CAM_W = "cameraw"
 CAM_C = "cameracanny"
 DEBUG_STATE = True
 MW_W = 1100
-MW_H = 630
+MW_H = 880
 FS = 60
 CR_PROCESS = "cr_proc"
 CR_PROC_DIM = "cr_proc_dim"
@@ -48,6 +51,8 @@ SC_WH = "dimwh"
 SC_HH = "dimhh"
 SAME_CARD = "samecard"
 DET_NO = "detno"
+RAD = "radius"
+MIN_DET = "mindet"
 SC_STDW = 800
 SC_STDH = 600
 FRCNN_W = 1900 // 2
@@ -61,15 +66,15 @@ SEL_W = "selectw"
 # cards game specific constants
 # -----------------------------
 GAMES = ["Blackjack", "Razboi", "Macao", "Septica"]
-current_game = None # type: str
-current_game_engine = None # type: BaseEngine
+current_game = None  # type: str
+current_game_engine = None  # type: BaseEngine
 
 # image and net specific constants
 # --------------------------------
 IMG_TAG = None
 img_normalized_not_flattened = None
 video_capture = None
-UPDATE_DETECTIONS_RATE = 400 # ms interval at which to update our detections, used to avoid slowing down the program too much
+UPDATE_DETECTIONS_RATE = 200  # ms interval at which to update our detections, used to avoid slowing down the program too much
 last_camera_update = 0
 dets = {} # type: Dict[str, torch.Tensor]
 selected_window_title = None
@@ -104,62 +109,6 @@ def _change_debug_text(sender, app_data, user_data):
 
 
 @torch.inference_mode()
-def update_camera(model: torch.nn.Module):
-    global last_camera_update, UPDATE_DETECTIONS_RATE, dets, video_capture
-
-    if not dpg.does_item_exist(CAM_W_IMG):
-        return
-    ret, frame = video_capture.read()
-    if frame is None:
-        return
-    img_data = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-    img_tensor = torch.from_numpy(img_data)
-    img_tensor = img_tensor.permute(2, 0, 1)
-    shape = img_tensor.size()[1:]
-    img_tensor = torch.from_numpy(np.asarray(T.ToPILImage()(img_tensor).resize((1900, 1080))))
-    img_tensor = img_tensor.permute(2, 0, 1)
-    if time.time() * 1000 - last_camera_update > UPDATE_DETECTIONS_RATE: # update every UCR ms the bounding boxes
-        last_camera_update = time.time() * 1000
-
-        img_tensor = T.ConvertImageDtype(torch.float32)(img_tensor)
-        img_tensor = img_tensor.to("cuda")
-        detections = model(img_tensor.unsqueeze(0))
-        dets = detections[0]
-        apply_inplace_filters(dets)
-
-    img_pil = draw_detection(T.ToPILImage()(img_tensor), dets)
-    img_pil = img_pil.resize(shape[::-1])
-    img_data = np.asarray(img_pil)
-    img_data = img_data.flatten().astype(np.float32)
-    img_normalized = img_data / 255
-    dpg.set_value(CAM_W_IMG, img_normalized)
-
-
-def _release_video_capture(sender, app_data, user_data):
-    video_capture.release()
-
-
-def _capture_camera(sender, app_data, user_data):
-    global video_capture, IMG_TAG
-    if not dpg.does_item_exist(CAM_W):
-        video_capture = cv.VideoCapture(0)
-        ret, frame = video_capture.read()
-        img_data = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-        img_data = img_data.flatten().astype(np.float32)
-        IMG_TAG = img_data / 255
-        frame_width = video_capture.get(cv.CAP_PROP_FRAME_WIDTH)
-        frame_height = video_capture.get(cv.CAP_PROP_FRAME_HEIGHT)
-
-        with dpg.window(tag=CAM_W, on_close=_release_video_capture, label="Camera"):
-            with dpg.texture_registry(show=False):
-                dpg.add_raw_texture(frame_width, frame_height, IMG_TAG, tag=CAM_W_IMG, format=dpg.mvFormat_Float_rgb)
-            dpg.add_image(CAM_W_IMG)
-    else:
-        video_capture.open(0)
-        dpg.show_item(CAM_W)
-
-
-@torch.inference_mode()
 def update_screen_area(model: torch.nn.Module):
     global last_camera_update, UPDATE_DETECTIONS_RATE, dets, cards_pot, player_hand, IMG_TAG
 
@@ -185,7 +134,7 @@ def update_screen_area(model: torch.nn.Module):
         detections = model(img_tensor.unsqueeze(0))
         dets = detections[0]
         apply_inplace_filters(dets)
-        cards_pot, player_hand = get_player_hand(current_game, dets)
+        cards_pot, player_hand = get_player_hand(current_game, dets, dpg.get_value(RAD))
         cards_pot, player_hand = filter_same_card(dets, cards_pot, player_hand)
         check_if_change_detections(dets)
 
@@ -243,7 +192,7 @@ def apply_inplace_filters(dets) -> None:
     filter_detections_by_game(current_game, dets)
     second_nms(dets)
     filter_non_group_detections(current_game, dets)
-    filter_small(dets)
+    filter_small(dets, dpg.get_value(MIN_DET))
 
 
 def check_if_change_detections(dets) -> None:
@@ -265,12 +214,12 @@ def check_if_change_detections(dets) -> None:
 
     if same_ph_in_a_row >= det_row_thresh:
         player_hand_labels = player_prefix
-        # if same_ph_in_a_row == det_row_thresh:
-        #     print(f"I think hand is {[pos_cls_inverse[l] for l in player_hand_labels]}")
+        if same_ph_in_a_row == det_row_thresh:
+            print(f"I think hand is {[pos_cls_inverse[l] for l in player_hand_labels]}")
     if same_cp_in_a_row >= det_row_thresh:
         cards_pot_labels = cards_prefix
-        # if same_cp_in_a_row == det_row_thresh:
-        #     print(f"I think card pot is {[pos_cls_inverse[l] for l in cards_pot_labels]}")
+        if same_cp_in_a_row == det_row_thresh:
+            print(f"I think card pot is {[pos_cls_inverse[l] for l in cards_pot_labels]}")
 
 
 @torch.inference_mode()
@@ -285,7 +234,7 @@ def update_selected_window(model: torch.nn.Module):
     x = dpg.get_value(CR_PROC_X)
     y = dpg.get_value(CR_PROC_Y)
     img, _ = grab_selected_window_contents(hwnd=selected_window_hwnd, w=w, h=h, x=x, y=y)
-    img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
+    # img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
     img_tensor = torch.from_numpy(img[:, :, :3])
     # img = np.asarray(Image.fromarray(img).resize((FRCNN_W, FRCNN_H))) # resize to net dimensions
     img_tensor = img_tensor.permute(2, 0, 1)
@@ -301,7 +250,7 @@ def update_selected_window(model: torch.nn.Module):
         detections = model(img_tensor.unsqueeze(0)) # act as batch of 1 x img_tensor
         dets = detections[0]
         apply_inplace_filters(dets)
-        cards_pot, player_hand = get_player_hand(current_game, dets)
+        cards_pot, player_hand = get_player_hand(current_game, dets, dpg.get_value(RAD))
         suppress_same = dpg.get_value(SAME_CARD)
         if suppress_same:
             cards_pot, player_hand = filter_same_card(dets, cards_pot, player_hand)
@@ -381,6 +330,9 @@ def _change_game(sender, app_data, user_data):
         with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_new_action_space_fixed.model", "rb") as f:
             bj_agent = pickle.load(f)
         current_game_engine = BlackjackEngine(bj_agent=bj_agent)
+    elif current_game == "Septica":
+        septica_agent = get_septica_agent(SepticaEnv())
+        current_game_engine = SepticaEngine(septica_agent=septica_agent)
 
 
 def update_agent():
@@ -406,7 +358,11 @@ def create_main_window(font):
         win_names = grab_all_open_windows()
         print(win_names)
         dpg.add_checkbox(label="Suppress same card", tag=SAME_CARD, default_value=True)
-        dpg.add_input_int(label="Chain detections to change hands", width=200, tag=DET_NO, default_value=2)
+        dpg.add_input_int(label="Chain detections to change hands", width=200, tag=DET_NO, default_value=3)
+        # 200 good for septica, 270 good for blackjack
+        dpg.add_input_int(label="Radius for same-hand detection", width=250, tag=RAD, default_value=270, step=10)
+        # 1.4 good for bj; 0.4 good for septica
+        dpg.add_input_float(label="Min area for detection", width=250, tag=MIN_DET, default_value=1.4, step=0.1)
         dpg.add_combo(label="Select window", tag=SEL_W, items=win_names, width=MW_W // 2,
                       callback=_change_active_window)
         dpg.add_combo(label="Select game", items=GAMES, width=MW_W // 2, callback=_change_game)

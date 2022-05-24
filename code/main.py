@@ -1,6 +1,6 @@
 import random
 
-from GUI.main_window import create_main_window, create_dpg_env, update_camera, update_screen_area, update_selected_window,\
+from GUI.main_window import create_main_window, create_dpg_env, update_screen_area, update_selected_window,\
                             update_agent, update_window_names
 import dearpygui.dearpygui as dpg
 from Models.Vision.faster import train_frcnn, validate, train_frcnn_reference, get_faster

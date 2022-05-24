@@ -35,6 +35,6 @@ def compare_detections(last_card_pot: List[int], last_player_hand: List[int], ca
         if idx in player_hand_idx:
             detected_player_hand.append(label.item())
 
-    flag_ph = 1 if set(good_player_hand) == set(old_good_player) else -1
-    flag_cp = 1 if set(good_cards_pot) == set(old_good_cards) else -1
+    flag_ph = 1 if len(old_good_player) == 0 or len(set(good_player_hand).intersection(set(old_good_player))) > 0 else -1
+    flag_cp = 1 if len(old_good_cards) == 0 or len(set(good_cards_pot).intersection(set(old_good_cards))) > 0 else -1
     return flag_cp, flag_ph, good_cards_pot, good_player_hand, detected_card_pot, detected_player_hand

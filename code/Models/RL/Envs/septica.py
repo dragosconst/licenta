@@ -126,21 +126,26 @@ class SepticaEnv(gym.Env):
             assert len(self.played_cards) > 0  # can't end hand before playing
             # end hand
             if self.is_challenging:
+                won = False
                 self.adversary_points += play_value(self.played_cards) * REWARD_MULT
                 reward -= play_value(self.played_cards) * REWARD_MULT
             else:
+                won = True
                 self.player_points += play_value(self.played_cards) * REWARD_MULT
                 reward += play_value(self.played_cards) * REWARD_MULT
             self.used_cards.update(self.played_cards)
             self.played_cards = []
             if len(self.deck) > 0:
                 self.player_hand, self.adversary_hand, self.deck = draw_until(self.deck, self.player_hand, self.adversary_hand, 4, self.np_random)
-            self.is_first_player = not self.is_first_player
+            self.is_first_player = won
             self.is_challenging = False
         return reward
 
     def step(self, action, extra_info=None):
-        reward = self.action_processing(action, extra_info)
+        if not (len(self.played_cards) == 0 and not self.is_first_player):
+            reward = self.action_processing(action, extra_info)
+        else:
+            reward = 0
 
         done = 0
         if len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:
@@ -152,7 +157,7 @@ class SepticaEnv(gym.Env):
                 1 if self.player_points > self.adversary_points else -1) * REWARD_MULT  # might have no effect
 
         # adversary stuff
-        if not done:
+        if not done and not (len(self.played_cards) == 0 and self.is_first_player):
             next_state = alpha_beta(state=self.build_state_from_env()).best_next_state
             game_state = next_state.game_state  # type: SepticaMinmax
             self.player_hand = game_state.player_hand
@@ -182,21 +187,23 @@ class SepticaEnv(gym.Env):
         self.played_cards = []  # the player always begins the match
         self.used_cards = set()
         self.is_challenging = False
-        self.is_first_player = True
+        self.is_first_player = False
 
         self.player_points = 0
         self.adversary_points = 0
         return self._get_obs()
 
     def step_agent(self, action, extra_info=None):
-        reward = self.action_processing(action, extra_info)
-
+        if not (len(self.played_cards) == 0 and not self.is_first_player):
+            reward = self.action_processing(action, extra_info)
+        else:
+            reward = 0
         done = 0
         if len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:
             # reward += 5 * (1 if self.player_points > self.adversary_points else -1) # might have no effect
             done = 1
 
-        if not done:
+        if not done and not (len(self.played_cards) == 0 and self.is_first_player):
             agent = sa.get_septica_agent(self)
             # agent = None
             print(self._get_adv_obs())
@@ -217,9 +224,11 @@ class SepticaEnv(gym.Env):
                 assert len(self.played_cards) > 0  # can't end hand before playing
                 # end hand
                 if self.is_challenging:
+                    won = True
                     self.player_points += play_value(self.played_cards) * REWARD_MULT
                     reward += play_value(self.played_cards) * REWARD_MULT
                 else:
+                    won = False
                     self.adversary_points += play_value(self.played_cards) * REWARD_MULT
                     reward -= play_value(self.played_cards) * REWARD_MULT
                 self.used_cards.update(self.played_cards)
@@ -228,7 +237,7 @@ class SepticaEnv(gym.Env):
                     self.player_hand, self.adversary_hand, self.deck = draw_until(self.deck, self.player_hand,
                                                                                   self.adversary_hand, 4,
                                                                                   self.np_random)
-                self.is_first_player = not self.is_first_player
+                self.is_first_player = won
                 self.is_challenging = False
             print(self._get_obs())
 
@@ -248,10 +257,14 @@ class SepticaEnv(gym.Env):
         print(f"Adv score is {self.adversary_points}")
         action = None
         extra_info = None
-        action = input("State your action (with extra info if req):")
-        action = action.split(" ")
-        if len(action) >= 2:
-            extra_info = " ".join(action[1:])
+        if not (len(self.played_cards) == 0 and not self.is_first_player):
+            action = input("State your action (with extra info if req):")
+            action = action.split(" ")
+            if len(action) >= 2:
+                extra_info = " ".join(action[1:])
+        else:
+            action = "0"
+            extra_info = None
         action = int(action[0])
         _, reward, done = self.step_agent(action, extra_info)
         print(f"Pot after adv move: {self.played_cards}.")

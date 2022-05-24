@@ -78,7 +78,7 @@ def new_indices(cards_pot: List[int], player_hand: List[int]) -> Tuple[List[int]
     return cards_pot, player_hand
 
 
-def get_player_hand(game: str, detections: Dict[str, torch.Tensor]) -> Union[Tuple[List[int], ...], None]:
+def get_player_hand(game: str, detections: Dict[str, torch.Tensor], radius: int) -> Union[Tuple[List[int], ...], None]:
     """
     Get the groups consisting of the player hand and cards pot.
 
@@ -112,7 +112,6 @@ def get_player_hand(game: str, detections: Dict[str, torch.Tensor]) -> Union[Tup
         return np.sqrt((x2c - x1c) ** 2 + (y2c - y1c) ** 2)
 
 
-    RADIUS = 270
     gr_no = 0
     groups = {}
     # create the group indexes from the filtered detections
@@ -124,7 +123,7 @@ def get_player_hand(game: str, detections: Dict[str, torch.Tensor]) -> Union[Tup
             if idx == idy:
                 continue
             dist = distance_between_boxes(box1, box2)
-            if dist <= RADIUS:
+            if dist <= radius:
                 if idy not in groups:
                     groups[idy] = groups[idx]
                 elif groups[idx] != groups[idy]:

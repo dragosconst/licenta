@@ -184,13 +184,13 @@ def filter_non_group_detections(game: str, detections: Dict[str, torch.Tensor]) 
     detections["scores"] = detections["scores"][good_indices]
 
 
-def filter_small(detection: Dict[str, torch.Tensor]) -> None:
+def filter_small(detection: Dict[str, torch.Tensor], small_fact: float) -> None:
     boxes = detection["boxes"]
     scores = detection["scores"]
     labels = detection["labels"]
 
     good_idx = []
-    too_small = 1.4 * 10 ** 3
+    too_small = small_fact * 10 ** 3
     for idx, box in enumerate(boxes):
         x1, y1, x2, y2 = box
         if (x2 - x1) * (y2 - y1) < too_small:

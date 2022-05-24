@@ -21,8 +21,8 @@ Generate a dataset of a certain size from a given dataset of cropped cards and a
 
 """
 
-IM_HEIGHT = 540
-IM_WIDTH = 950
+IM_HEIGHT = 1080//1.75
+IM_WIDTH = 1900//1.75
 SQ_2 = 1.414
 
 

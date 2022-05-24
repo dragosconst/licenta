@@ -3,7 +3,8 @@ import copy
 
 from Models.RL.Envs.septica_utils import draw_card, draw_hand, build_deck, play_value, draw_until, REWARD_MULT
 
-class SepticaMinmax():
+
+class SepticaMinmax:
     MINP = 0
     MAXP = 1
 
@@ -53,9 +54,11 @@ class SepticaMinmax():
                 new_player_score = self.player_score
                 new_adversary_score = self.adversary_score
                 if not self.is_challenging:
+                    won = True
                     new_adversary_score = self.adversary_score + play_value(self.played_cards) * REWARD_MULT
                     add_reward = -play_value(self.played_cards) * REWARD_MULT
                 else:
+                    won = False
                     new_player_score = self.player_score + play_value(self.played_cards) * REWARD_MULT
                     add_reward = play_value(self.played_cards) * REWARD_MULT
                 new_player_hand = copy.deepcopy(self.player_hand)
@@ -67,7 +70,7 @@ class SepticaMinmax():
                         print("aefewgfewg32WF32")
                     new_player_hand, new_adversary_hand, new_deck = draw_until(new_deck, new_player_hand, new_adversary_hand, 4, new_np_random)
                 all_moves.append(SepticaMinmax(new_player_hand, new_adversary_hand, [], new_deck, False,
-                                               self.next_player(), new_player_score, new_adversary_score, copy.deepcopy(new_np_random),
+                                               won, new_player_score, new_adversary_score, copy.deepcopy(new_np_random),
                                                self.reward + add_reward))
         else:
             for card in self.player_hand:
@@ -82,9 +85,11 @@ class SepticaMinmax():
                 new_player_score = self.player_score
                 new_adversary_score = self.adversary_score
                 if not self.is_challenging:
+                    won = False
                     new_player_score = self.player_score + play_value(self.played_cards) * REWARD_MULT
                     add_reward = play_value(self.played_cards) * REWARD_MULT
                 else:
+                    won = True
                     new_adversary_score = self.adversary_score + play_value(self.played_cards) * REWARD_MULT
                     add_reward = -play_value(self.played_cards) * REWARD_MULT
                 new_player_hand = copy.deepcopy(self.player_hand)
@@ -96,7 +101,7 @@ class SepticaMinmax():
                         print("saffwt13q")
                     new_player_hand, new_adversary_hand, new_deck = draw_until(new_deck, new_player_hand, new_adversary_hand, 4, new_np_random)
                 all_moves.append(SepticaMinmax(new_player_hand, new_adversary_hand, [], new_deck, False,
-                                               self.next_player(), new_player_score, new_adversary_score, copy.deepcopy(new_np_random),
+                                               won, new_player_score, new_adversary_score, copy.deepcopy(new_np_random),
                                                self.reward + add_reward))
         return all_moves
 
@@ -110,9 +115,13 @@ class SepticaMinmax():
     def calculate_score(self, depth, player):
         return self.adversary_score - self.player_score
 
-    @classmethod
-    def adv_player(cls, player):
-        return (player + 1) % 2
+    def adv_player(self, player, moves: List):
+        adv_players = []
+        for move in moves:
+            if player == move.first_player and len(move.played_cards) == 0:
+                adv_players.append(player)
+            adv_players.append((player + 1) % 2)
+        return adv_players
 
 
 class SepticaState:
@@ -130,8 +139,8 @@ class SepticaState:
 
     def moves(self):
         l_moves = self.game_state.moves(self.current_player)
-        adv_player = SepticaMinmax.adv_player(self.current_player)
-        l_state_moves = [SepticaState(move, adv_player, self.depth - 1, parent=self) for move in l_moves]
+        adv_players = self.game_state.adv_player(self.current_player, l_moves)
+        l_state_moves = [SepticaState(move, adv_players[idx], self.depth - 1, parent=self) for idx, move in enumerate(l_moves)]
 
         return l_state_moves
 
