@@ -214,12 +214,12 @@ def check_if_change_detections(dets) -> None:
 
     if same_ph_in_a_row >= det_row_thresh:
         player_hand_labels = player_prefix
-        if same_ph_in_a_row == det_row_thresh:
-            print(f"I think hand is {[pos_cls_inverse[l] for l in player_hand_labels]}")
+        # if same_ph_in_a_row == det_row_thresh:
+        #     print(f"I think hand is {[pos_cls_inverse[l] for l in player_hand_labels]}")
     if same_cp_in_a_row >= det_row_thresh:
         cards_pot_labels = cards_prefix
-        if same_cp_in_a_row == det_row_thresh:
-            print(f"I think card pot is {[pos_cls_inverse[l] for l in cards_pot_labels]}")
+        # if same_cp_in_a_row == det_row_thresh:
+        #     print(f"I think card pot is {[pos_cls_inverse[l] for l in cards_pot_labels]}")
 
 
 @torch.inference_mode()
@@ -318,7 +318,10 @@ def _change_active_window(sender, app_data, user_data):
             dpg.add_slider_int(label="Width", tag=CR_PROC_WH, default_value=w, min_value=100, max_value=2000)
             dpg.add_slider_int(label="Height", tag=CR_PROC_HH, default_value=h, min_value=100, max_value=2000)
             dpg.add_slider_int(label="X pos", tag=CR_PROC_X, default_value=x, min_value=0, max_value=1900)
-            dpg.add_slider_int(label="Y pos", tag=CR_PROC_Y, default_value=y, min_value=0, max_value=1080)
+            if current_game != "Septica":
+                dpg.add_slider_int(label="Y pos", tag=CR_PROC_Y, default_value=y, min_value=0, max_value=1080)
+            else:
+                dpg.add_slider_int(label="Y pos", tag=CR_PROC_Y, default_value=300, min_value=0, max_value=1080)
         dpg.show_item(CR_PROC_DIM)
 
 

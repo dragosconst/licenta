@@ -201,13 +201,15 @@ class MacaoEnv(gym.Env):
             # change suite with a 7
             assert extra_info is not None
             assert extra_info[0] == "7"
+            old_suits = self.suite
             self.suite = [extra_info[-1]]
             self.player_hand.remove(extra_info[:2])
             self.cards_pot.append(extra_info[:2])
             reward += 1
-            # for card in self.player_hand:
-            #     if same_suite(self.suite, card):
-            #         reward += 1
+            if extra_info[-1] not in old_suits: # avoid continously changing to the same suit
+                for card in self.player_hand:
+                    if card[0] != '7' and same_suite(self.suite, card): # reward for different cards
+                        reward += 1
         elif action == 5:
             assert self.player_turns_to_wait > 0
         if self.player_turns_to_wait > 0:

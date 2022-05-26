@@ -21,8 +21,8 @@ Generate a dataset of a certain size from a given dataset of cropped cards and a
 
 """
 
-IM_HEIGHT = 1080//1.75
-IM_WIDTH = 1900//1.75
+IM_HEIGHT = int(1080//1.75)
+IM_WIDTH = int(1900//1.75)
 SQ_2 = 1.414
 
 
@@ -41,13 +41,13 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
     transforms = MyCompose(
        (#RandomGaussianNoise(mean=0., var=0.07, prob=0.9),
         RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
-        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.9, 1.1), prob=0.6),
+        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.4, 0.6), prob=0.8),
         RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3))
     )
     transforms_digital = MyCompose(
        (#RandomGaussianNoise(mean=0., var=1e-6, prob=0.9),
         RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
-        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.9, 1.1), prob=0.6),
+        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.4, 0.6), prob=0.8),
         RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3))
     )
 
@@ -609,5 +609,5 @@ def resize_dataset(root_dir: str, dest_dir: str, res_factor: float) -> None:
 if __name__ == "__main__":
     # dataset_statistics("../../data/my_stuff_augm/testing/")
     # resize_dataset("../../data/RAW/my-stuff-cropped/", "../../data/RAW/my-stuff-cropped-res/", 0.3)
-    gen_dataset_from_dir("../../data/RAW/PNG-cards-1.3/PNG-cards-1.3/", "../../data/my_stuff_augm/stretched/", num_datasets=1,
-                         prob_datasets=[1.], num_imgs=1 * 10**4, start_from=11 * 10 **4, stretch=True)
+    gen_dataset_from_dir("../../data/RAW/my-stuff-cropped-res/", "../../data/my_stuff_augm/smol/", num_datasets=2,
+                         prob_datasets=[0.7, 0.3], num_imgs=2 * 10**4, start_from=13 * 10 **4, stretch=False)

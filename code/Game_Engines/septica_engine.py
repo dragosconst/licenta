@@ -73,7 +73,8 @@ class SepticaEngine(BaseEngine):
             or set(self.player_hand) != set(detected_player_hand) or (len(self.cards_down) > 0 and self.cards_down[-1] != detected_card_down)\
             or len(self.cards_down) == 0)\
                 and self.state != SepticaStates.EVAL:
-            self.player_hand = detected_player_hand
+            if self.state != SepticaStates.WAIT and self.state != SepticaStates.WORS:
+                self.player_hand = detected_player_hand
             if detected_card_down is not None and detected_card_down not in self.cards_down and detected_card_down != self.played_card:
                 self.valid_change = True
             if detected_card_down is not None and (len(self.cards_down) == 0 or detected_card_down != self.cards_down[-1]):
@@ -113,6 +114,7 @@ class SepticaEngine(BaseEngine):
                     print(f"Put down card {extra_info}.")
                     print(f"My cards are {self.player_hand}.")
                     print(f"Cards down are {self.cards_down}.")
+                    print(f"State is {state}")
                     if self.is_challenged and (extra_info[0] == "7" or extra_info[0] == self.cards_down[0][0]):
                         self.is_challenged = False
                     self.state = SepticaStates.WAIT
@@ -123,6 +125,7 @@ class SepticaEngine(BaseEngine):
                     print(f"End turn.")
                     print(f"My cards are {self.player_hand}.")
                     print(f"Cards down are {self.cards_down}.")
+                    print(f"State is {state}")
                     self.state = SepticaStates.EVAL
             elif self.state == SepticaStates.WAIT:
                 if self.valid_change:
@@ -146,7 +149,7 @@ class SepticaEngine(BaseEngine):
                     print(f"Cards down are {self.cards_down}.")
                     self.valid_change = False
                     if len(self.cards_down) == 1 or (self.cards_down[-1][0] == "7" or self.cards_down[-1][0] == self.cards_down[0][0]):
-                        self.is_challenged = False
+                        self.is_challenged = True
                     self.state = SepticaStates.THINK
                     self.used_cards.update(self.cards_down)
             elif self.state == SepticaStates.THINK:
@@ -159,15 +162,16 @@ class SepticaEngine(BaseEngine):
                 print(f"Put down card {extra_info}.")
                 print(f"My cards are {self.player_hand}.")
                 print(f"Cards down are {self.cards_down}.")
+                print(f"State is {state}")
                 if extra_info[0] == "7" or extra_info[0] == self.cards_down[0][0]:
-                    self.is_challenged = True
+                    self.is_challenged = False
                 self.state = SepticaStates.WORS
                 self.cards_down.append(extra_info)
                 self.played_card = extra_info
                 self.used_cards.add(self.played_card)
                 self.finished_time = time() - self.WAIT_PERIOD//2
         if self.state == SepticaStates.EVAL:
-            won = self.is_first_player ^ self.is_challenged
+            won = not self.is_challenged
             if won:
                 print(f"Won {play_value(self.cards_down)} points.")
                 self.player_score += play_value(self.cards_down)

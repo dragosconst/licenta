@@ -11,6 +11,7 @@ def main():
     main_font = create_dpg_env()
     create_main_window(main_font)
     frcnn = get_faster("../data/frcnn_resnet50_5k_per_class_stretched_e0.pt")
+    # frcnn = get_faster("../data/frcnn_resnet50_5k_per_class_smol_e3.pt")
     frcnn.eval()
     while dpg.is_dearpygui_running():
         update_window_names()

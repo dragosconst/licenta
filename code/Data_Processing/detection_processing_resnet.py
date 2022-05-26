@@ -72,7 +72,7 @@ def filter_under_thresh(detection: Dict[str, torch.Tensor]) -> None:
     good_idx = []
     # the boxes are already sorted according to scores
     for idx, score in enumerate(scores):
-        if score < 0.75:
+        if score < 0.8:
             continue
         good_idx.append(idx)
 
