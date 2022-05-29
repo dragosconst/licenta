@@ -23,7 +23,7 @@ def get_random_bg_img(imgs_fns) -> Image.Image:
     return img
 
 
-MAX_IM_SIZE = 350//1.75
+MAX_IM_SIZE = 350//1
 def get_random_img(dir_path: str, stretched: bool=False) -> Tuple[Image.Image, Dict[str, torch.Tensor]]:
     fps = glob.glob(os.path.join(dir_path, "*.jpg"))
     xmls = glob.glob(os.path.join(dir_path, "*.xml"))
@@ -77,7 +77,7 @@ def load_img_and_xml(fp: str, im_name: str, stretched: bool=False) -> Tuple[Imag
     if stretched:
         img = torch.from_numpy(np.asarray(img, dtype=np.uint8))
         img = img.permute(2, 0, 1)
-        img, data_dict = RandomStretch(sx=(0.6, 2.), sy=(0.6, 2.), prob=0.9)(img.to("cuda"), data_dict)
+        img, data_dict = RandomStretch(sx=(0.6, 2.), sy=(0.6, 2.), prob=0.75)(img.to("cuda"), data_dict)
         img = img.permute(1, 2, 0).cpu()
         img = np.asarray(img, dtype=np.uint8)
         img = Image.fromarray(img)

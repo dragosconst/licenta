@@ -8,6 +8,7 @@ import cv2 as cv
 import numpy as np
 import torch
 import torchvision.transforms as T
+import torchvision.transforms.functional as F
 from PIL import Image
 
 from Windows_utils.windows import grab_all_open_windows, grab_selected_window_contents, grab_screen_area
@@ -46,6 +47,7 @@ CR_PROC_Y = "cr_proc_posy"
 CR_PROC_AG_BUT = "cr_proc_ag_but"
 CAM_W_IMG = "cam_img"
 CAM_C_IMG = "cam_c_img"
+NO_FILTER = "no_filters"
 DIM_W = "dimw"
 SC_WH = "dimwh"
 SC_HH = "dimhh"
@@ -55,8 +57,8 @@ RAD = "radius"
 MIN_DET = "mindet"
 SC_STDW = 800
 SC_STDH = 600
-FRCNN_W = 1900 // 2
-FRCNN_H = 1080 // 2
+FRCNN_W = int(1900 // 1.75)
+FRCNN_H = int(1080 // 1.75)
 SC_X = "posx"
 SC_Y = "posy"
 SC_W = "screencw"
@@ -235,9 +237,11 @@ def update_selected_window(model: torch.nn.Module):
     y = dpg.get_value(CR_PROC_Y)
     img, _ = grab_selected_window_contents(hwnd=selected_window_hwnd, w=w, h=h, x=x, y=y)
     # img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
+    # img = np.asarray(Image.fromarray(img).resize((FRCNN_W, FRCNN_H)))  # resize to net dimensions/
     img_tensor = torch.from_numpy(img[:, :, :3])
-    # img = np.asarray(Image.fromarray(img).resize((FRCNN_W, FRCNN_H))) # resize to net dimensions
     img_tensor = img_tensor.permute(2, 0, 1)
+    # img_tensor = F.adjust_brightness(img_tensor, brightness_factor=0.8)
+    img_tensor = F.affine(img_tensor, angle=0, translate=(-300, 100), scale=1, shear=[0])
     shape = img_tensor.size()[1:]
     # img_tensor = torch.from_numpy(np.asarray(T.ToPILImage()(img_tensor).resize((1900, 1080))))
     # img_tensor = img_tensor.permute(2, 0, 1)
@@ -249,7 +253,8 @@ def update_selected_window(model: torch.nn.Module):
         det_time = time.time()
         detections = model(img_tensor.unsqueeze(0)) # act as batch of 1 x img_tensor
         dets = detections[0]
-        apply_inplace_filters(dets)
+        if dpg.get_value(NO_FILTER):
+            apply_inplace_filters(dets)
         cards_pot, player_hand = get_player_hand(current_game, dets, dpg.get_value(RAD))
         suppress_same = dpg.get_value(SAME_CARD)
         if suppress_same:
@@ -266,7 +271,7 @@ def update_selected_window(model: torch.nn.Module):
     # img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
     # img = np.power(img, [1.2, 1.03, 1.0, 1.0])
     img = img.astype(np.float32)
-    img_normalized_not_flattened[:h, :w] = img[:, :] / 255
+    img_normalized_not_flattened = img[:, :] / 255
     # img_normalized = img_normalized_not_flattened.flatten() / 255
     dpg.configure_item(CR_PROCESS, width=w, height=h)
     dpg.set_value(CR_PROC_TEXT, img_normalized_not_flattened)
@@ -361,6 +366,7 @@ def create_main_window(font):
         win_names = grab_all_open_windows()
         print(win_names)
         dpg.add_checkbox(label="Suppress same card", tag=SAME_CARD, default_value=True)
+        dpg.add_checkbox(label="Apply in-place filers", tag=NO_FILTER, default_value=True)
         dpg.add_input_int(label="Chain detections to change hands", width=200, tag=DET_NO, default_value=3)
         # 200 good for septica, 270 good for blackjack
         dpg.add_input_int(label="Radius for same-hand detection", width=250, tag=RAD, default_value=270, step=10)

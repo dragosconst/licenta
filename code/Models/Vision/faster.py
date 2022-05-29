@@ -118,9 +118,9 @@ def train_frcnn(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_
                 sys.exit(1)
         print(f"Loss after epoc {epoch} is {sum(full_loss)/len(full_loss)}.")
         validate(model, valid_dataloader, device)
-        torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_smol_e" + str(epoch +
+        torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_stretched_random_res_e" + str(epoch +
                                                                             (0 if start_from is None else start_from)) +
-            "_no_noise.pt")
+            ".pt")
 
         if lr_scheduler is not None:
             lr_scheduler.step()
@@ -233,6 +233,6 @@ if __name__ == "__main__":
     train_frcnn(frcnn, adam, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
                 device="cuda", num_epochs=7)
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_slices.pt")
-    torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_smol_no_noise.pt")
+    torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_stretched_random_res.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\mobilenet_v3_320_large.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_custom.pt")

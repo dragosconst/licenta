@@ -203,21 +203,20 @@ class MacaoAgent:
                torch.as_tensor([player_turns]), torch.as_tensor([adv_turns]), torch.as_tensor([adv_len]),\
                new_suites, torch.as_tensor([pass_flag])
 
+    def rebuild_state_for_train(self, processed_state: Tuple) -> Tuple:
+        player_hand, last_card, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suites, pass_flag = processed_state
+        player_hand = [self.full_deck[idx] for idx in torch.nonzero(player_hand)]
+        last_card = [self.full_deck[idx] for idx in torch.nonzero(last_card)][0]
+        suits = [self.full_suits[idx] for idx in torch.nonzero(suites)]
+        return player_hand, last_card, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suites, pass_flag
+
+
     @classmethod
     def check_legal_action(cls, state, action, extra_info):
         hand, last_card, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suits, pass_flag = state
-        last_card_name = None
-        for idx, card in enumerate(last_card):
-            if card:
-                last_card_name = cls.full_deck[idx]
-        new_hand = set()
-        for idx, card in enumerate(hand):
-            if card:
-                new_hand.add(cls.full_deck[idx])
-        new_suits = set()
-        for idx, suit in enumerate(suits):
-            if suit:
-                new_suits.add(cls.full_suits[idx])
+        last_card_name = [cls.full_deck[idx] for idx in torch.nonzero(last_card)][0]
+        new_hand = [cls.full_deck[idx] for idx in torch.nonzero(hand)]
+        new_suits = [cls.full_suits[idx] for idx in torch.nonzero(suits)]
 
         if action == 0:
             if player_turns > 0:
@@ -247,6 +246,45 @@ class MacaoAgent:
             if player_turns > 0:
                 return False
             if extra_info[:2] not in new_hand:
+                return False
+            if extra_info[0] != "7":
+                return False
+            return drawing_contest[0] == 0 and turns_contest[0] == 0
+        elif action == 5:
+            return player_turns > 0 and drawing_contest[0] == 0 and turns_contest[0] == 0
+        return False  # used for when it chooses action 4 but it has no 7s
+
+    def check_legal_action_rebuilt(self, state, action, extra_info):
+        hand, last_card, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suits, pass_flag = state
+
+        if action == 0:
+            if player_turns > 0:
+                return False
+            if extra_info not in hand:
+                return False
+            if drawing_contest[0] > 0:
+                return extra_info[0] in {"2", "3", "4", "5"} or extra_info[:3] == "jok"
+
+            # now check if we are in a waiting turns contest, i.e. aces
+            if turns_contest[0] > 0:
+                return extra_info[0] == "A"
+
+            # finally, we are left with the case of trying to put a regular card over another regular card
+            return last_card[0] == extra_info[0] or same_suite(suits, extra_info)
+        elif action == 1:
+            if player_turns > 0:
+                return False
+            if pass_flag[0]:
+                return False
+            return drawing_contest[0] == 0 and turns_contest[0] == 0
+        elif action == 2:
+            return drawing_contest[0] > 0
+        elif action == 3:
+            return turns_contest[0] > 0
+        elif action == 4:
+            if player_turns > 0:
+                return False
+            if extra_info[:2] not in hand:
                 return False
             if extra_info[0] != "7":
                 return False
@@ -344,9 +382,10 @@ class MacaoAgent:
             q_hat_sorted = torch.argsort(q_hat, dim=1)
             actions = [None] * len(q_hat_sorted)
             for idx, action_idxs in enumerate(q_hat_sorted):
+                processed_state = self.rebuild_state_for_train(states[idx])
                 for action_idx in reversed(action_idxs):
                     action, extra_info = self.idx_to_action(action_idx)
-                    if self.check_legal_action(states[idx], action, extra_info):
+                    if self.check_legal_action_rebuilt(processed_state, action, extra_info):
                         actions[idx] = (action, extra_info)
                         break
         return actions
@@ -406,9 +445,10 @@ class MacaoAgent:
         actions_as_idx_batch = [None] * len(q_next_sorted)
         # execution bottleneck
         for idx, actions_as_idx_state in enumerate(q_next_sorted):
+            processed_state = self.rebuild_state_for_train(batch_states[idx])
             for action_idx in reversed(actions_as_idx_state):
                 action, extra_info = self.idx_to_action(action_idx)
-                if self.check_legal_action(batch_states[idx], action, extra_info):
+                if self.check_legal_action_rebuilt(processed_state, action, extra_info):
                     actions_as_idx_batch[idx] = action_idx
                     break
         actions_as_idx_batch = torch.as_tensor(actions_as_idx_batch)
@@ -456,8 +496,8 @@ class MacaoAgent:
                 print(f"Avg reward so far is {sum(episodes_rewards)/len(episodes_rewards)}.")
                 print(f"Avg loss so far is {sum(avg_losses)/len(avg_losses)}.")
             if e % 50 == 0:
-                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_{e}_doubleq.model")
-                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_{e}_doubleq.model")
+                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_{e}_doubleq_7rewards.model")
+                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_{e}_doubleq_7rewards.model")
 
     def make_state_readable(self, state):
         hand, last_cards, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suits, pass_flag = state
@@ -542,8 +582,8 @@ class MacaoAgent:
         print(f"Average reward is {wins/num_iters*100}")
 
     def save_models(self):
-        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq.model")
-        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq.model")
+        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq_7rewards.model")
+        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq_7rewards.model")
 
 
 def get_macao_agent(env):
@@ -564,8 +604,8 @@ if __name__ == "__main__":
                              eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.1, pre_train_steps=300,
                                                                  final_eps_step=10 ** 5))
     macao_agent.total_steps = 1000
-    macao_agent.q.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq.model"))
-    macao_agent.q_target.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq.model"))
-    macao_agent.get_statistics(10**4)
-    # macao_agent.train(max_episodes=10**4)
-    # macao_agent.save_models()
+    # macao_agent.q.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq.model"))
+    # macao_agent.q_target.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq.model"))
+    # macao_agent.get_statistics(10**4)
+    macao_agent.train(max_episodes=10**4)
+    macao_agent.save_models()

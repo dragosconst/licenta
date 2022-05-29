@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import torchvision.transforms.functional as F
 from torchvision.utils import draw_bounding_boxes
 from tqdm import tqdm
+import seaborn as sns
 
 from Utils.file_utils import get_image_files, get_random_bg_img, get_random_img, load_img_and_xml, MAX_IM_SIZE
 from Utils.trans import RandomAffineBoxSensitive, RandomPerspectiveBoxSensitive, MyCompose, RandomColorJitterBoxSensitive, RandomGaussianNoise, \
@@ -21,9 +22,24 @@ Generate a dataset of a certain size from a given dataset of cropped cards and a
 
 """
 
-IM_HEIGHT = int(1080//1.75)
-IM_WIDTH = int(1900//1.75)
+IM_HEIGHT = int(1080//1)
+IM_WIDTH = int(1900//1)
 SQ_2 = 1.414
+
+
+def resize_card_and_boxes(card, boxes, max_im_size: int) -> Tuple[Image.Image, Dict[str, torch.Tensor]]:
+    max_dim = np.max(card.size)
+    w, h = card.size
+    scale_factor = max_im_size / max_dim
+    img = card.resize((int(w * scale_factor), int(h * scale_factor)))
+    for idx, box in enumerate(boxes):
+        x1, y1, x2, y2 = box
+        x1 = int(x1 * scale_factor)
+        y1 = int(y1 * scale_factor)
+        x2 = int(x2 * scale_factor)
+        y2 = int(y2 * scale_factor)
+        boxes[idx] = torch.as_tensor((x1, y1, x2, y2))
+    return img, boxes
 
 
 def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, Dict[str, torch.Tensor]]:
@@ -41,23 +57,30 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
     transforms = MyCompose(
        (#RandomGaussianNoise(mean=0., var=0.07, prob=0.9),
         RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
-        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.4, 0.6), prob=0.8),
-        RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3))
+        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.5, 1.5), prob=0.8),
+        RandomPerspectiveBoxSensitive(dist_scale=0.6, prob=0.3))
     )
     transforms_digital = MyCompose(
        (#RandomGaussianNoise(mean=0., var=1e-6, prob=0.9),
-        RandomColorJitterBoxSensitive(brightness=0.7, prob=0.7),
-        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.4, 0.6), prob=0.8),
-        RandomPerspectiveBoxSensitive(dist_scale=0.5, prob=0.3))
+        RandomColorJitterBoxSensitive(brightness=0.8, prob=0.7),
+        RandomAffineBoxSensitive(degrees=(0, 350), scale=(0.5, 1.5), prob=0.8),
+        RandomPerspectiveBoxSensitive(dist_scale=0.6, prob=0.3))
     )
 
+    h_mult = random.uniform(1.3, 2)
+    w_mult = random.uniform(1.5, 2)
+    im_height = int(IM_HEIGHT / h_mult)
+    im_width = int(IM_WIDTH / w_mult)
     # create the card masks, they will be a couple of black images with cards on them after various transforms
     for (img, data) in cards:
-        img_full = np.zeros((IM_HEIGHT, IM_WIDTH, 4), dtype=np.uint8)
+        img_full = np.zeros((im_height, im_width, 4), dtype=np.uint8)
 
-        PAD_SIZE = int(MAX_IM_SIZE * SQ_2 * 1.5)
+        max_im_size = MAX_IM_SIZE/min(w_mult, h_mult)
+        PAD_SIZE = int(max_im_size * SQ_2 * 1.5)
         # use a padding array to avoid applying the transforms on the whole image
         padding = np.zeros((PAD_SIZE, PAD_SIZE, 4), dtype=np.uint8)
+        # resize image
+        img, data["boxes"] = resize_card_and_boxes(img, data["boxes"], max_im_size)
         imw, imh = img.size
         img = np.asarray(img, dtype=np.uint8)
         padding[(PAD_SIZE-imh)//2:(PAD_SIZE-imh)//2+imh,
@@ -87,17 +110,17 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
         new_boxes = []
         good_idx = []
         h, w, *_ = padding.shape
-        x = torch.randint(low=20, high=IM_WIDTH - w//2, size=(1,)).item()
-        y = torch.randint(low=20, high=IM_HEIGHT - h//2, size=(1,)).item()
+        x = torch.randint(low=20, high=im_width - w//2, size=(1,)).item()
+        y = torch.randint(low=20, high=im_height - h//2, size=(1,)).item()
         for idx, box in enumerate(boxes):
             x1, y1, x2, y2 = box
-            if x1 + x >= IM_WIDTH or y1 + y >= IM_HEIGHT or x2 + x - IM_WIDTH >= IM_WIDTH - x1 - x or \
-                    y2 + y - IM_HEIGHT >= IM_HEIGHT - y1 - y:
+            if x1 + x >= im_width or y1 + y >= im_height or x2 + x - im_width >= im_width - x1 - x or \
+                    y2 + y - im_height >= im_height - y1 - y:
                 continue
             x1 = max(x1 + x, 0)
             y1 = max(y1 + y, 0)
-            x2 = min(x2 + x, IM_WIDTH - 1)
-            y2 = min(y2 + y, IM_HEIGHT - 1)
+            x2 = min(x2 + x, im_width - 1)
+            y2 = min(y2 + y, im_height - 1)
             new_boxes.append(torch.as_tensor((x1, y1, x2, y2)).float())
             good_idx.append(idx)
         if len(new_boxes) > 0:
@@ -106,15 +129,15 @@ def generate_random_image(*cards, bg_image: Image.Image) -> Tuple[Image.Image, D
             data["boxes"] = torch.as_tensor([])
         data["labels"] = data["labels"][good_idx]
         # for the case in which the entire padding image can't fully fit in the image
-        x_crop = min(x + w, IM_WIDTH) - x
-        y_crop = min(y + h, IM_HEIGHT) - y
+        x_crop = min(x + w, im_width) - x
+        y_crop = min(y + h, im_height) - y
         img_full[y:y+y_crop, x:x+x_crop, :] = padding[:y_crop, :x_crop, :]
         img_full = Image.fromarray(img_full)
 
         card_masks.append((img_full, data))
 
     # resize background
-    bg_image = bg_image.resize((IM_WIDTH, IM_HEIGHT))
+    bg_image = bg_image.resize((im_width, im_height))
 
     final_targets = {"boxes": [], "labels": []}
     # start stacking the photos - always check if a new image obscures the labels of an old one
@@ -580,6 +603,7 @@ def dataset_statistics(dataset_path: str) -> None:
     plt.title(f"Data labels spread, mean of {mean} and variance of {variance}")
     plt.show()
 
+
 def resize_dataset(root_dir: str, dest_dir: str, res_factor: float) -> None:
     files = glob.glob(os.path.join(root_dir, "*.jpg"))
     for i in tqdm(range(len(files))):
@@ -606,8 +630,33 @@ def resize_dataset(root_dir: str, dest_dir: str, res_factor: float) -> None:
         img.save(os.path.join(dest_dir, str(i) + ".jpg"))
         write_annotation(dest_dir, str(i), img.size[::-1], data_dict)
 
+def average_positions():
+    folders = ["../../data/my_stuff_augm/", "../../data/my_stuff_augm/testing/", "../../data/my_stuff_augm/stretched/",
+                "../../data/my_stuff_augm/random_resolutions/"]
+    files_list = [glob.glob(os.path.join(folder, "*.xml")) for folder in folders]
+    full_image = np.zeros((1080//2, 1900//2))
+    for files in files_list:
+        for file in tqdm(files):
+            xml_stuff = parse_xml(file, img_dims=True)
+            for bbox in xml_stuff:
+                cls, xmin, ymin, xmax, ymax, img_h, img_w = bbox
+                xmin_p = xmin/img_w
+                ymin_p = ymin/img_h
+                xmax_p = xmax/img_w
+                ymax_p = ymax/img_h
+                xmin_full = int(xmin_p * 1080//2)
+                ymin_full = int(ymin_p * 1900//2)
+                xmax_full = int(xmax_p * 1080//2)
+                ymax_full = int(ymax_p * 1900//2)
+                full_image[ymin_full:ymax_full, xmin_full:xmax_full] += 1
+    sns.heatmap(full_image)
+    plt.show()
+    plt.savefig("positions_most_common.jpg")
+
+
 if __name__ == "__main__":
     # dataset_statistics("../../data/my_stuff_augm/testing/")
     # resize_dataset("../../data/RAW/my-stuff-cropped/", "../../data/RAW/my-stuff-cropped-res/", 0.3)
-    gen_dataset_from_dir("../../data/RAW/my-stuff-cropped-res/", "../../data/my_stuff_augm/smol/", num_datasets=2,
-                         prob_datasets=[0.7, 0.3], num_imgs=2 * 10**4, start_from=13 * 10 **4, stretch=False)
+    # gen_dataset_from_dir("../../data/RAW/PNG-cards-1.3/PNG-cards-1.3/", "../../data/my_stuff_augm/random_resolutions/", num_datasets=1,
+    #                      prob_datasets=[1], num_imgs=1 * 10**4, start_from=17 * 10 **4, stretch=True)
+    average_positions()

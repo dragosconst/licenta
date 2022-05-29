@@ -81,7 +81,7 @@ all_classes = {
                 "JOKER_black": ["JOKER_black", "JOKER"], "JOKER_red": ["JOKER_red"]
                } # set of all class names found throughout the datasets -> change them all to my chosen namings
 
-def parse_xml(path):
+def parse_xml(path, img_dims: bool=False):
     tree = ET.parse(path)
     symbols = []
     for obj in tree.findall('object'):
@@ -92,7 +92,12 @@ def parse_xml(path):
         ymin = int(bbox.find('ymin').text)
         xmax = int(bbox.find('xmax').text)
         ymax = int(bbox.find('ymax').text)
-        symbols.append([name, xmin, ymin, xmax, ymax])
+        if not img_dims:
+            symbols.append([name, xmin, ymin, xmax, ymax])
+        else:
+            img_h = int(tree.find("size").find("height").text)
+            img_w = int(tree.find("size").find("width").text)
+            symbols.append([name, xmin, ymin, xmax, ymax, img_h, img_w])
 
     return symbols
 
