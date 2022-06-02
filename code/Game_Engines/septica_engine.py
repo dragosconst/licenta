@@ -37,7 +37,7 @@ class SepticaEngine(BaseEngine):
         self.is_challenged = False
         self.used_cards = set()
         self.finished_time = 0
-        self.WAIT_PERIOD = 4  # wait period between turns in seconds
+        self.WAIT_PERIOD = 6  # wait period between turns in seconds
 
         # cool statistics
         self.total_wins = 0
@@ -61,9 +61,13 @@ class SepticaEngine(BaseEngine):
             return
 
         if len(detected_card_down) > 0:
-            detected_card_down = [card for card in detected_card_down if card not in self.cards_down]
+            detected_card_down = [card for card in detected_card_down if card not in self.cards_down and card not in self.used_cards]
             if len(detected_card_down) > 0:
                 detected_card_down = detected_card_down[0]
+                if detected_card_down in self.used_cards:
+                    print(f"Something went wrong with detections....")
+                    print("-"*50)
+                    print("-"*50)
             else:
                 detected_card_down = None
         else:

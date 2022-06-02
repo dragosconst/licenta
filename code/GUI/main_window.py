@@ -241,7 +241,7 @@ def update_selected_window(model: torch.nn.Module):
     img_tensor = torch.from_numpy(img[:, :, :3])
     img_tensor = img_tensor.permute(2, 0, 1)
     # img_tensor = F.adjust_brightness(img_tensor, brightness_factor=0.8)
-    img_tensor = F.affine(img_tensor, angle=0, translate=(-300, 100), scale=1, shear=[0])
+    # img_tensor = F.affine(img_tensor, angle=0, translate=(300, 100), scale=1, shear=[0])
     shape = img_tensor.size()[1:]
     # img_tensor = torch.from_numpy(np.asarray(T.ToPILImage()(img_tensor).resize((1900, 1080))))
     # img_tensor = img_tensor.permute(2, 0, 1)
@@ -316,7 +316,7 @@ def _change_active_window(sender, app_data, user_data):
         dpg.show_item(CR_PROCESS)
     if not dpg.does_item_exist(CR_PROC_DIM):
         with dpg.window(tag=CR_PROC_DIM):
-            w = 1980
+            w = 1980 - (80 if current_game == "Septica" else 0)
             h = 1080
             x = 0
             y = 0
@@ -324,9 +324,9 @@ def _change_active_window(sender, app_data, user_data):
             dpg.add_slider_int(label="Height", tag=CR_PROC_HH, default_value=h, min_value=100, max_value=2000)
             dpg.add_slider_int(label="X pos", tag=CR_PROC_X, default_value=x, min_value=0, max_value=1900)
             if current_game != "Septica":
-                dpg.add_slider_int(label="Y pos", tag=CR_PROC_Y, default_value=y, min_value=0, max_value=1080)
+                dpg.add_slider_int(label="Y pos", tag=CR_PROC_Y, default_value=90, min_value=0, max_value=1080)
             else:
-                dpg.add_slider_int(label="Y pos", tag=CR_PROC_Y, default_value=300, min_value=0, max_value=1080)
+                dpg.add_slider_int(label="Y pos", tag=CR_PROC_Y, default_value=350, min_value=0, max_value=1080)
         dpg.show_item(CR_PROC_DIM)
 
 
@@ -338,9 +338,15 @@ def _change_game(sender, app_data, user_data):
         with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_new_action_space_fixed.model", "rb") as f:
             bj_agent = pickle.load(f)
         current_game_engine = BlackjackEngine(bj_agent=bj_agent)
+        dpg.set_value(DET_NO, 3)
+        dpg.set_value(MIN_DET, 0.9)
+        dpg.set_value(RAD, 270)
     elif current_game == "Septica":
         septica_agent = get_septica_agent(SepticaEnv())
         current_game_engine = SepticaEngine(septica_agent=septica_agent)
+        dpg.set_value(DET_NO, 3)
+        dpg.set_value(MIN_DET, 0.1)
+        dpg.set_value(RAD, 200)
 
 
 def update_agent():
@@ -370,7 +376,7 @@ def create_main_window(font):
         dpg.add_input_int(label="Chain detections to change hands", width=200, tag=DET_NO, default_value=3)
         # 200 good for septica, 270 good for blackjack
         dpg.add_input_int(label="Radius for same-hand detection", width=250, tag=RAD, default_value=270, step=10)
-        # 1.4 good for bj; 0.4 good for septica
+        # 0.9 good for bj; 0.3 good for septica
         dpg.add_input_float(label="Min area for detection", width=250, tag=MIN_DET, default_value=1.4, step=0.1)
         dpg.add_combo(label="Select window", tag=SEL_W, items=win_names, width=MW_W // 2,
                       callback=_change_active_window)

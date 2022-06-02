@@ -20,11 +20,13 @@ def eval(detection, target, iou_thresh: float=0.5):
     for box, label, score in zip(boxes, labels, scores):
         max_box = None
         max_label = None
+        max_iou = None
         for gt_box, gt_label in zip(gt_boxes, gt_labels):
             iou = intersection_over_union(box, gt_box)
             if iou >= iou_thresh:
-                if max_box is None or iou > max_box:
+                if max_box is None or iou > max_iou:
                     max_box = gt_box
+                    max_iou = iou
                     max_label = gt_label
         if max_box is None: # there shouldn't be anything here...
             false_positives += 1

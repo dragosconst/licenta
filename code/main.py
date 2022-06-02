@@ -10,8 +10,11 @@ from Utils.utils import load_dataloader, get_loader
 def main():
     main_font = create_dpg_env()
     create_main_window(main_font)
-    frcnn = get_faster("../data/frcnn_resnet50_5k_per_class_stretched_e0.pt")
-    # frcnn = get_faster("../data/frcnn_resnet50_5k_per_class_smol_e3.pt")
+    # frcnn = get_faster("../data/frcnn_resnet50_posind_e2.pt")
+    frcnn = get_faster("../data/frcnn_resnet50_betterrpn_e1.pt")
+    # frcnn = get_faster("../data/frcnn_resnet50_5k_per_class_stretched_e0.pt")
+    # frcnn = get_faster("../data/frcnn_resnet50_5k_per_class_smol_e3_no_noise.pt")
+    # frcnn = get_faster("../data/frcnn_mobilenetv3_large_posind_e7.pt", mobilenet=True)
     frcnn.eval()
     while dpg.is_dearpygui_running():
         update_window_names()

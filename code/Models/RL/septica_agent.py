@@ -118,7 +118,6 @@ class SepticaAgent:
         return new_player_hand, new_first, new_used_cards, torch.as_tensor([value]), torch.as_tensor([is_first]),\
                torch.as_tensor([is_challenging])
 
-
     def check_legal_action(self, state, action, extra_info=None):
         player_hand_one_hot, first_card_one_hot, used_cards, value, is_first, is_challenging = state
         player_hand = set()

@@ -73,14 +73,14 @@ def train_frcnn(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_
     for p in model.parameters():
         if p.requires_grad:
             p.register_hook(lambda grad: torch.clamp(grad, -1, 1))
-    accumulate = 16
+    accumulate = 22
     print_freq = 20
 
-    moving_loss = deque(maxlen=7)
-    moving_class = deque(maxlen=7)
-    moving_obj = deque(maxlen=7)
-    moving_box_reg = deque(maxlen=7)
-    moving_rpn_box_reg = deque(maxlen=7)
+    moving_loss = deque(maxlen=20)
+    moving_class = deque(maxlen=20)
+    moving_obj = deque(maxlen=20)
+    moving_box_reg = deque(maxlen=20)
+    moving_rpn_box_reg = deque(maxlen=20)
     for epoch in range(num_epochs):
         model.train()   # train mode
 
@@ -96,6 +96,7 @@ def train_frcnn(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_
             loss_value = losses.item()
             full_loss.append(loss_value)
 
+            losses = losses / accumulate  # normalize losses
             losses.backward()
 
             moving_loss.append(loss_value)
@@ -118,7 +119,7 @@ def train_frcnn(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_
                 sys.exit(1)
         print(f"Loss after epoc {epoch} is {sum(full_loss)/len(full_loss)}.")
         validate(model, valid_dataloader, device)
-        torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_stretched_random_res_e" + str(epoch +
+        torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_betterrpn_e" + str(epoch +
                                                                             (0 if start_from is None else start_from)) +
             ".pt")
 
@@ -170,8 +171,11 @@ def validate(model: torch.nn.Module, valid_dataloader: torch.utils.data.DataLoad
     print(f"Recall is {true_positives / total_len}.")
 
 
-def get_faster(model_path: str) -> torch.nn.Module:
-    frcnn = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True).to("cuda")
+def get_faster(model_path: str, mobilenet: bool=False) -> torch.nn.Module:
+    if not mobilenet:
+        frcnn = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True).to("cuda")
+    else:
+        frcnn = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=True).to("cuda")
     # frcnn = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn(pretrained=True).to("cuda")  # low res
     in_features = frcnn.roi_heads.box_predictor.cls_score.in_features
     # replace the pre-trained head with a new one
@@ -185,7 +189,8 @@ def get_faster(model_path: str) -> torch.nn.Module:
 # when running this script, train various nets
 if __name__ == "__main__":
     # torch.cuda.empty_cache()
-    frcnn = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True).to("cuda")
+    frcnn = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True, trainable_backbone_layers=4).to("cuda")
+    # frcnn = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=True, trainable_backbone_layers=5).to("cuda")
     # frcnn = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn(pretrained=True).to("cuda")  # low res
     in_features = frcnn.roi_heads.box_predictor.cls_score.in_features
     # replace the pre-trained head with a new one
@@ -219,7 +224,7 @@ if __name__ == "__main__":
     #             device="cuda", num_epochs=30)
 
     # frcnn.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_slices.pt"))
-    frcnn.load_state_dict(torch.load("/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_stretched_e1.pt"))
+    frcnn.load_state_dict(torch.load("/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_betterrpn_e0.pt"))
     # frcnn.eval()
 
     frcnn.to("cuda")
@@ -231,8 +236,8 @@ if __name__ == "__main__":
     # validate(frcnn, valid_loader, "cuda")
 
     train_frcnn(frcnn, adam, lr_scheduler=lr_sched, train_dataloader=train_loader, valid_dataloader=valid_loader,
-                device="cuda", num_epochs=7)
+                device="cuda", num_epochs=7, start_from=1)
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_slices.pt")
-    torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_stretched_random_res.pt")
+    torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_betterrpn.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\mobilenet_v3_320_large.pt")
     # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_custom.pt")
