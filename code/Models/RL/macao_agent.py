@@ -206,9 +206,11 @@ class MacaoAgent:
     def rebuild_state_for_train(self, processed_state: Tuple) -> Tuple:
         player_hand, last_card, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suites, pass_flag = processed_state
         player_hand = [self.full_deck[idx] for idx in torch.nonzero(player_hand)]
+        # cards_pot = [self.full_deck[idx] for idx in torch.nonzero(cards_pot)]
         last_card = [self.full_deck[idx] for idx in torch.nonzero(last_card)][0]
         suits = [self.full_suits[idx] for idx in torch.nonzero(suites)]
-        return player_hand, last_card, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suites, pass_flag
+        return player_hand, last_card, cards_pot, drawing_contest, \
+               turns_contest, player_turns, adv_turns, adv_len, suits, pass_flag
 
 
     @classmethod
@@ -258,7 +260,7 @@ class MacaoAgent:
         hand, last_card, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suits, pass_flag = state
 
         if action == 0:
-            if player_turns > 0:
+            if player_turns[0] > 0:
                 return False
             if extra_info not in hand:
                 return False
@@ -272,7 +274,7 @@ class MacaoAgent:
             # finally, we are left with the case of trying to put a regular card over another regular card
             return last_card[0] == extra_info[0] or same_suite(suits, extra_info)
         elif action == 1:
-            if player_turns > 0:
+            if player_turns[0] > 0:
                 return False
             if pass_flag[0]:
                 return False
@@ -282,7 +284,7 @@ class MacaoAgent:
         elif action == 3:
             return turns_contest[0] > 0
         elif action == 4:
-            if player_turns > 0:
+            if player_turns[0] > 0:
                 return False
             if extra_info[:2] not in hand:
                 return False
@@ -290,7 +292,7 @@ class MacaoAgent:
                 return False
             return drawing_contest[0] == 0 and turns_contest[0] == 0
         elif action == 5:
-            return player_turns > 0 and drawing_contest[0] == 0 and turns_contest[0] == 0
+            return player_turns[0] > 0 and drawing_contest[0] == 0 and turns_contest[0] == 0
         return False  # used for when it chooses action 4 but it has no 7s
 
     @classmethod
@@ -592,9 +594,9 @@ def get_macao_agent(env):
                                                                  final_eps_step=10 ** 5))
     agent.total_steps = 1000
     agent.q.load_state_dict(
-        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq.model"))
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq_7rewards.model"))
     agent.q_target.load_state_dict(
-        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq.model"))
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq_7rewards.model"))
     return agent
 
 if __name__ == "__main__":
@@ -604,8 +606,8 @@ if __name__ == "__main__":
                              eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.1, pre_train_steps=300,
                                                                  final_eps_step=10 ** 5))
     macao_agent.total_steps = 1000
-    # macao_agent.q.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq.model"))
-    # macao_agent.q_target.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq.model"))
-    # macao_agent.get_statistics(10**4)
-    macao_agent.train(max_episodes=10**4)
-    macao_agent.save_models()
+    macao_agent.q.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq_7rewards.model"))
+    macao_agent.q_target.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq_7rewards.model"))
+    macao_agent.get_statistics(10**4)
+    # macao_agent.train(max_episodes=10**4)
+    # macao_agent.save_models(

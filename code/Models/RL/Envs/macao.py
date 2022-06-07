@@ -10,7 +10,7 @@ from Models.RL.Envs.macao_minmax import alpha_beta, State, MacaoMinmax
 from Models.RL.Envs.macao_random import MacaoRandom
 from Models.RL.Envs.macao_utils import build_deck, draw_cards, draw_card, draw_hand,get_last_5_cards, get_card_suite, same_suite, shuffle_deck,\
                                         check_if_deck_empty
-# import Models.RL.macao_agent as ma
+import Models.RL.macao_agent as ma
 
 
 class MacaoEnv(gym.Env):
@@ -280,8 +280,8 @@ class MacaoEnv(gym.Env):
         done = 1 if final != 0 else 0
 
         if not done:
-            # agent = ma.get_macao_agent(self)
-            agent = None
+            agent = ma.get_macao_agent(self)
+            # agent = None
             action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
             action, extra_info = action
             assert action is None or self.action_space.contains(action)
