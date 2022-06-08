@@ -22,7 +22,7 @@ def run_single_episode(env, agent, state=None):
     goodies = 0
     extra = 0
     while not done:
-        action = agent.get_action(state)
+        action = agent.get_action_no_eps(state)
         output = env.step(action)
         if len(output) == 2:
             e1, e2 = output
@@ -45,10 +45,9 @@ def run_single_episode(env, agent, state=None):
     return result, goodies, extra  # must return a list of tuples (state,action,reward,next_state,done)
 
 
-class MCAgent():
+class MCAgent:
     def __init__(self, env, gamma=1.0,
                  start_epsilon=1.0, end_epsilon=0.05, epsilon_decay=0.99999):
-
         self.env = env
         self.n_action = self.env.action_space.n
         self.policy = defaultdict(lambda: 0)  # always stay as default init policy

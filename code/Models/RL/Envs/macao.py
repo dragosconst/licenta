@@ -282,7 +282,7 @@ class MacaoEnv(gym.Env):
         if not done:
             agent = ma.get_macao_agent(self)
             # agent = None
-            action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
+            action = agent.get_action_no_eps([agent.process_state(self._get_adv_obs())], eps=0)[0]
             action, extra_info = action
             assert action is None or self.action_space.contains(action)
             reward = 0

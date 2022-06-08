@@ -126,7 +126,7 @@ class BlackjackEngine(BaseEngine):
             state = (splittable, sum_player, 10 if self.dealer_hand[0] in {"K", "Q", "J"}
                      else int(self.dealer_hand[0]), ace)
 
-            action = self.agent.get_action(state)
+            action = self.agent.get_action_no_eps(state)
             if action == 0:  # STAND
                 print(f"I'm standing.")
                 print(f"My cards are {self.player_hand}.")

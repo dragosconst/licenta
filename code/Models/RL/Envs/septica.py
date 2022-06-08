@@ -207,7 +207,7 @@ class SepticaEnv(gym.Env):
             agent = sa.get_septica_agent(self)
             # agent = None
             print(self._get_adv_obs())
-            action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
+            action = agent.get_action_no_eps([agent.process_state(self._get_adv_obs())], eps=0)[0]
             action, extra_info = action
             assert action is None or self.action_space.contains(action)
             if action == 0:
