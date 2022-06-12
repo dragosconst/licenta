@@ -3,15 +3,16 @@ from typing import List, Tuple
 import copy
 
 import gym
+from tqdm import trange
 from gym import spaces
 from gym.utils import seeding
+import numpy as np
 
 from Models.RL.Envs.macao_minmax import alpha_beta, State, MacaoMinmax
 from Models.RL.Envs.macao_random import MacaoRandom
 from Models.RL.Envs.macao_utils import build_deck, draw_cards, draw_card, draw_hand,get_last_5_cards, get_card_suite, same_suite, shuffle_deck,\
                                         check_if_deck_empty
 import Models.RL.macao_agent as ma
-
 
 class MacaoEnv(gym.Env):
     """
@@ -206,10 +207,22 @@ class MacaoEnv(gym.Env):
             self.player_hand.remove(extra_info[:2])
             self.cards_pot.append(extra_info[:2])
             reward += 1
-            if extra_info[-1] not in old_suits:  # avoid continously changing to the same suit
-                for card in self.player_hand:
-                    if card[0] != '7' and same_suite(self.suite, card): # reward for different cards
-                        reward += 1
+            # if extra_info[-1] not in old_suits:  # avoid continously changing to the same suit
+            #     suit_list = ["s", "c", "d", "h"]
+            #     pos_rewards = [0] * len(suit_list)
+            #     for card in self.player_hand:
+            #         if card[0] != '7':  # reward for different cards
+            #             if card == "joker black":
+            #                 pos_rewards[0] += 1
+            #                 pos_rewards[1] += 1
+            #                 continue
+            #             if card == "joker red":
+            #                 pos_rewards[2] += 1
+            #                 pos_rewards[3] += 1
+            #                 continue
+            #             pos_rewards[suit_list.index(card[-1])] += 1
+            #     if suit_list[np.argmax(pos_rewards)] in self.suite:
+            #         reward += max(pos_rewards)
         elif action == 5:
             assert self.player_turns_to_wait > 0
         if self.player_turns_to_wait > 0:
@@ -280,8 +293,8 @@ class MacaoEnv(gym.Env):
         done = 1 if final != 0 else 0
 
         if not done:
-            agent = ma.get_macao_agent(self)
-            # agent = None
+            # agent = ma.get_macao_agent(self)
+            agent = None
             action = agent.get_action_no_eps([agent.process_state(self._get_adv_obs())], eps=0)[0]
             action, extra_info = action
             assert action is None or self.action_space.contains(action)
@@ -340,6 +353,127 @@ class MacaoEnv(gym.Env):
 
         return self._get_obs(), reward + final, done
 
+    def agent_fight(self):
+        agent = ma.get_macao_no7s(self)
+        # agent = None
+        action = agent.get_action([agent.process_state(self._get_obs())], eps=0)[0]
+        action, extra_info = action
+        assert action is None or self.action_space.contains(action)
+        reward = 0
+        if action == 0:
+            # put down card
+            assert extra_info is not None
+            card = extra_info
+            assert self.check_legal_put(card)
+            reward += 1
+            self.player_hand.remove(card)
+            self.cards_pot.append(card)
+            self.process_put_down(card)
+            # change to new suite after player actions
+            self.suite = get_card_suite(self.cards_pot[-1])
+        elif action == 1:
+            # draw card
+            self.deck, self.cards_pot = check_if_deck_empty(self.deck, self.cards_pot)
+            reward -= 1
+            new_card, self.deck = draw_card(self.deck, self.np_random)
+            self.player_hand.append(new_card)
+        elif action == 2:
+            # concede to start drawing cards
+            cards_to_draw = self.drawing_contest
+            self.drawing_contest = 0
+            self.deck, self.cards_pot = check_if_deck_empty(self.deck, self.cards_pot)
+            new_cards, self.deck = draw_cards(deck=self.deck, cards_pot=self.cards_pot, num=cards_to_draw,
+                                              np_random=self.np_random)
+            self.player_hand += new_cards
+            reward -= cards_to_draw
+        elif action == 3:
+            # concede to waiting for turns
+            turns_to_wait = self.player_turns_to_wait + self.turns_contest
+            self.turns_contest = 0
+            self.player_turns_to_wait = turns_to_wait
+            reward -= turns_to_wait
+        elif action == 4:
+            # change suite with a 7
+            assert extra_info is not None
+            assert extra_info[0] == "7"
+            old_suits = self.suite
+            self.suite = [extra_info[-1]]
+            self.player_hand.remove(extra_info[:2])
+            self.cards_pot.append(extra_info[:2])
+            reward += 1
+            # if extra_info[-1] not in old_suits:
+            #     suit_list = ["s", "c", "d", "h"]
+            #     pos_rewards = [0] * len(suit_list)
+            #     for card in self.player_hand:
+            #         if card[0] != '7':  # reward for different cards
+            #             pos_rewards[suit_list.index(card[-1])] += 1
+            #     if suit_list[np.argmax(pos_rewards)] in self.suite:
+            #         reward += pos_rewards
+        elif action == 5:
+            assert self.player_turns_to_wait > 0
+
+        if self.player_turns_to_wait > 0:
+            self.player_turns_to_wait -= 1
+
+        final = self.final_state()
+        done = 1 if final != 0 else 0
+        if not done:
+            agent = ma.get_macao_agent(self)
+            # agent = None
+            action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
+            action, extra_info = action
+            assert action is None or self.action_space.contains(action)
+            if action == 0:
+                # put down card
+                assert extra_info is not None
+                card = extra_info
+                assert self.check_legal_put(card)
+                reward -= 1
+                self.adversary_hand.remove(card)
+                self.cards_pot.append(card)
+                self.process_put_down(card)
+                # change to new suite after player actions
+                self.suite = get_card_suite(self.cards_pot[-1])
+            elif action == 1:
+                # draw card
+                self.deck, self.cards_pot = check_if_deck_empty(self.deck, self.cards_pot)
+                reward += 1
+                new_card, self.deck = draw_card(self.deck, self.np_random)
+                self.adversary_hand.append(new_card)
+            elif action == 2:
+                # concede to start drawing cards
+                cards_to_draw = self.drawing_contest
+                self.drawing_contest = 0
+                self.deck, self.cards_pot = check_if_deck_empty(self.deck, self.cards_pot)
+                new_cards, self.deck = draw_cards(deck=self.deck, cards_pot=self.cards_pot, num=cards_to_draw,
+                                                  np_random=self.np_random)
+                self.adversary_hand += new_cards
+                reward += cards_to_draw
+            elif action == 3:
+                # concede to waiting for turns
+                turns_to_wait = self.adversary_turns_to_wait + self.turns_contest
+                self.turns_contest = 0
+                self.adversary_turns_to_wait = turns_to_wait
+                reward += turns_to_wait
+            elif action == 4:
+                # change suite with a 7
+                assert extra_info is not None
+                assert extra_info[0] == "7"
+                self.suite = [extra_info[-1]]
+                self.adversary_hand.remove(extra_info[:2])
+                self.cards_pot.append(extra_info[:2])
+                reward -= 1
+            elif action == 5:
+                assert self.adversary_turns_to_wait > 0
+
+            if self.adversary_turns_to_wait > 0:
+                self.adversary_turns_to_wait -= 1
+
+        final = self.final_state()
+        done = 1 if final != 0 else 0
+
+        return self._get_obs(), reward + final, done
+
     def render(self, mode="human"):
         print(f"Your hand is {self.player_hand}.")
         print(f"Dealer has {len(self.adversary_hand)} more cards.")
@@ -366,9 +500,21 @@ class MacaoEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    env = MacaoEnv()
-    env.reset()
+    # env = MacaoEnv()
+    # env.reset()
+    #
+    # while not env.render():
+    #     continue
 
-    while not env.render():
-        continue
+    wins = 0
+    for match in trange(10 ** 4):
+        env = MacaoEnv()
+        env.reset()
 
+        state, reward, done = env.agent_fight()
+        while not done:
+            old_reward = reward
+            state, reward, done = env.agent_fight()
+        if reward > 0 and reward - old_reward >= 70:
+            wins += 1
+    print(f"Wr of no 7s is {wins/(10**4)*(10**2):.4f}%")

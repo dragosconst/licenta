@@ -19,7 +19,7 @@ happen, but have almost negligible scores, usually.
 def second_nms(detection: Dict[str, torch.Tensor]) -> None:
     """
     Apply nms over the new detections again. For reasons I'm not sure of, the net (frcnn specifically) seems to detect
-    multiple times different cards in the same place, with the caveat that wrong detections have (very) low probabilities
+    multiple times different cards in the same place, with the caveat that wrong detec  tions have (very) low probabilities
     compared to the good detection. By doing nms again we supress all such detections.
 
     :param detection: detections returned by net

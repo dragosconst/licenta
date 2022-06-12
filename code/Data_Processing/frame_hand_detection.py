@@ -20,8 +20,6 @@ def compare_detections(last_card_pot: List[int], last_player_hand: List[int], ca
     good_player_hand = []
     detected_card_pot = []
     good_cards_pot = []
-    identical_with_last_det_ph = True # flag to check if the last two hands are identical
-    identical_with_last_det_cp = True # flag to check if the last two hands are identical
 
     boxes = detections["boxes"]
     labels = detections["labels"]

@@ -22,7 +22,7 @@ def run_single_episode(env, agent, state=None):
     goodies = 0
     extra = 0
     while not done:
-        action = agent.get_action_no_eps(state)
+        action = agent.get_action(state)
         output = env.step(action)
         if len(output) == 2:
             e1, e2 = output
@@ -393,29 +393,29 @@ class TablePlayerNewRules():
         #   2, 3, 4, 5, 6, 7, 8, 9, 10, A
             1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  # ---regular scores
             1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  # 8
-            4, 4, 4, 4, 4, 4, 1, 1, 1, 1,  # 9
-            4, 4, 4, 4, 4, 4, 4, 4, 4, 1,  # 10
-            4, 4, 4, 4, 4, 4, 4, 4, 4, 4,  # 11
+            3, 3, 3, 3, 3, 3, 1, 1, 1, 1,  # 9
+            3, 3, 3, 3, 3, 3, 3, 3, 3, 1,  # 10
+            3, 3, 3, 3, 3, 3, 3, 3, 3, 3,  # 11
             1, 1, 0, 0, 0, 1, 1, 1, 1, 1,  # 12
             0, 0, 0, 0, 0, 1, 1, 1, 1, 1,  # 13
             0, 0, 0, 0, 0, 1, 1, 1, 1, 1,  # 14
             0, 0, 0, 0, 0, 1, 1, 1, 1, 1,  # 15
             0, 0, 0, 0, 0, 1, 1, 1, 1, 1,  # 16
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  # 17+
-            1, 1, 1, 4, 4, 1, 1, 1, 1, 1,  # ---aces, 2
-            1, 1, 4, 4, 4, 1, 1, 1, 1, 1,  # 3
-            1, 1, 4, 4, 4, 1, 1, 1, 1, 1,  # 4
-            1, 1, 4, 4, 4, 1, 1, 1, 1, 1,  # 5
-            1, 4, 4, 4, 4, 1, 1, 1, 1, 1,  # 6
-            5, 5, 5, 5, 5, 0, 0, 1, 1, 1,  # 7
-            0, 0, 0, 0, 5, 0, 0, 0, 0, 0,  # 8
+            1, 1, 1, 3, 3, 1, 1, 1, 1, 1,  # ---aces, 2
+            1, 1, 3, 3, 3, 1, 1, 1, 1, 1,  # 3
+            1, 1, 3, 3, 3, 1, 1, 1, 1, 1,  # 4
+            1, 1, 3, 3, 3, 1, 1, 1, 1, 1,  # 5
+            1, 3, 3, 3, 3, 1, 1, 1, 1, 1,  # 6
+            4, 4, 4, 4, 4, 0, 0, 1, 1, 1,  # 7
+            0, 0, 0, 0, 4, 0, 0, 0, 0, 0,  # 8
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  # 9
             2, 2, 2, 2, 2, 2, 2, 2, 2, 2,  # ---splits;A and 8
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  # 10
             2, 2, 2, 2, 2, 0, 2, 2, 0, 0,  # 9
             2, 2, 2, 2, 2, 2, 1, 1, 1, 1,  # 7
             2, 2, 2, 2, 2, 1, 1, 1, 1, 1,  # 6
-            4, 4, 4, 4, 4, 4, 4, 4, 1, 1,  # 5
+            3, 3, 3, 3, 3, 3, 3, 3, 1, 1,  # 5
             1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  # 4
             1, 1, 2, 2, 2, 2, 1, 1, 1, 1  # 2,3
         ]
@@ -429,7 +429,7 @@ class TablePlayerNewRules():
         self.dealer_mappings = {2: 0, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 9: 6, 10: 7, 1: 8}
 
     def get_action(self, state):
-        split, player_sum, dealer, ace, double = state
+        split, player_sum, dealer, ace = state
         if player_sum == 21:
             return 0
         if not ace and split is None:
@@ -440,10 +440,6 @@ class TablePlayerNewRules():
             split = 10 if split in {"K", "Q", "J"} else int(split)
             player = self.splits_mappings[split]
         action = self.action_table[player * 10 + (dealer - 2 if dealer > 1 else 9)]
-        if action == 4:
-            action = 3 if double else 1
-        elif action == 5:
-            action = 3 if double else 0
         return action
 
 if __name__ == "__main__":
@@ -452,9 +448,9 @@ if __name__ == "__main__":
 
     # MC eval
     bj_agent = MCAgent(env2)
-    bj_agent.mc_control(n_episode=int(3.5 * 10 ** 6), first_visit=True)
-    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_new_action_space_fixed.model", "wb") as f:
-        pickle.dump(bj_agent, f)
+    # bj_agent.mc_control(n_episode=int(3.5 * 10 ** 6), first_visit=True)
+    # with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_new_action_space_fixed.model", "wb") as f:
+    #     pickle.dump(bj_agent, f)
     with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_firstvisit_BIG_new_action_space_fixed.model", "rb") as f:
         bj_agent = pickle.load(f)
 
@@ -504,16 +500,16 @@ if __name__ == "__main__":
     ylabs = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, "A,2",
              "A,3", "A,4", "A,5", "A,6", "A,7", "A,8", "A,9", "A,10",
              "2,2", "3,3", "4,4", "5,5", "6,6", "7,7", "8,8", "9,9", "10,10", "A,A"]
-    sn.heatmap(moves, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray')
-    plt.savefig("firstvisit_moves_BIG_double_correct_state_replay.png")
-    plt.show()
-    sn.heatmap(moves_visits, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray', cmap="YlGnBu")
-    plt.savefig("firstvisit_moves_BIG_double_correct_state_replay_visits.png")
-    plt.show()
+    # sn.heatmap(moves, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray')
+    # plt.savefig("firstvisit_moves_BIG_double_correct_state_replay.png")
+    # plt.show()
+    # sn.heatmap(moves_visits, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray', cmap="YlGnBu")
+    # plt.savefig("firstvisit_moves_BIG_double_correct_state_replay_visits.png")
+    # plt.show()
     print(moves)
 
-    # bj_agent = TablePlayerNewRules()
-    samples = 5 * 10 ** 5
+    bj_agent = TablePlayerNewRules()
+    samples = 1 * 10 ** 6
     extras = 0
     good = 0
     neutral = 0

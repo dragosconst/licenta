@@ -122,53 +122,66 @@ def update_screen_area(model: torch.nn.Module):
     y = dpg.get_value(SC_Y)
     img = grab_screen_area(x, y, w, h)
 
-    img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
+    # img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
+    # img = np.asarray(Image.fromarray(img).resize((FRCNN_W, FRCNN_H)))  # resize to net dimensions/
     img_tensor = torch.from_numpy(img[:, :, :3])
     img_tensor = img_tensor.permute(2, 0, 1)
+    # img_tensor = F.adjust_brightness(img_tensor, brightness_factor=0.8)
+    # img_tensor = F.affine(img_tensor, angle=0, translate=(300, 100), scale=1, shear=[0])
     shape = img_tensor.size()[1:]
-    img_tensor = torch.from_numpy(np.asarray(T.ToPILImage()(img_tensor).resize((1900, 1080))))
-    img_tensor = img_tensor.permute(2, 0, 1)
-    if time.time() * 1000 - last_camera_update > UPDATE_DETECTIONS_RATE: # update every UCR ms the bounding boxes
+    # img_tensor = torch.from_numpy(np.asarray(T.ToPILImage()(img_tensor).resize((1900, 1080))))
+    # img_tensor = img_tensor.permute(2, 0, 1)
+    if time.time() * 1000 - last_camera_update > UPDATE_DETECTIONS_RATE:  # update every UCR ms the bounding boxes
         last_camera_update = time.time() * 1000
 
         img_tensor = T.ConvertImageDtype(torch.float32)(img_tensor)
         img_tensor = img_tensor.to("cuda")
-        detections = model(img_tensor.unsqueeze(0))
+        det_time = time.time()
+        detections = model(img_tensor.unsqueeze(0))  # act as batch of 1 x img_tensor
         dets = detections[0]
-        apply_inplace_filters(dets)
+        if dpg.get_value(NO_FILTER):
+            apply_inplace_filters(dets)
         cards_pot, player_hand = get_player_hand(current_game, dets, dpg.get_value(RAD))
-        cards_pot, player_hand = filter_same_card(dets, cards_pot, player_hand)
+        suppress_same = dpg.get_value(SAME_CARD)
+        if suppress_same:
+            cards_pot, player_hand = filter_same_card(dets, cards_pot, player_hand)
         check_if_change_detections(dets)
 
     img_pil = draw_detection(T.ToPILImage()(img_tensor), dets, cards_pot, player_hand)
-    img_pil = img_pil.resize((min(dpg.get_viewport_width(), FRCNN_W), min(dpg.get_viewport_height(), FRCNN_H)))
+
+    h = dpg.get_viewport_height()
+    w = dpg.get_viewport_width()
+    img_pil = img_pil.resize((FRCNN_W, FRCNN_H))
     # img_pil = img_pil.resize(shape[::-1])
-    img[:dpg.get_viewport_height(), :dpg.get_viewport_width(), :3] = np.asarray(img_pil)
-    # img_pil = img_pil.resize(shape[::-1])
-    # img[:, :, :3] = np.asarray(img_pil)
-    # img = cv.resize(img, (SC_STDW, SC_STDH))
-    img = img.flatten().astype(np.float32)
-    IMG_TAG = img / 255
-    dpg.set_value(SC_C, IMG_TAG)
+    img = np.asarray(img_pil)
+    # img = cv.cvtColor(img, cv.COLOR_RGB2RGBA) # needs to be RGBA for dearpygui
+    # img = np.power(img, [1.2, 1.03, 1.0, 1.0])
+    img = img.astype(np.float32)
+    img_normalized_not_flattened = img[:, :] / 255
+    # img_normalized = img_normalized_not_flattened.flatten() / 255
+    dpg.configure_item(SC_W, width=w, height=h)
+    dpg.set_value(SC_C, img_normalized_not_flattened)
+    dpg.configure_item(IMG_TAG, texture_tag=SC_C, pmin=(0, 70), pmax=(w - 20, h - 110), parent=SC_W)
 
 
 def _get_screen_area():
-    global IMG_TAG
+    global IMG_TAG, img_normalized_not_flattened
 
     if not dpg.does_item_exist(DIM_W):
         with dpg.window(tag=SC_W, width=FRCNN_W, height=FRCNN_H, label="Screen Capture"):
             dpg.add_button(label="Restart Agent", tag=CR_PROC_AG_BUT, callback=_restart_agent)
-            with dpg.texture_registry(show=False):
-                w = 1900
-                h = 1080
-                x = 0
-                y = 0
-                img = grab_screen_area(x, y, w, h)
-                img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
-                # img = cv.resize(img, (SC_STDW, SC_STDH))
-                img = img.flatten().astype(np.float32)
-                IMG_TAG = img / 255
-                dpg.add_raw_texture(w, h, IMG_TAG, tag=SC_C, format=dpg.mvFormat_Float_rgba)
+            w = FRCNN_W
+            h = FRCNN_H
+            x = 0
+            y = 0
+            img = grab_screen_area(x, y, w, h)
+            img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
+            # img = cv.resize(img, (SC_STDW, SC_STDH))
+            img = img.flatten().astype(np.float32)
+            img_normalized_not_flattened = np.zeros((h, w, 3), dtype=np.float32)
+            img_normalized_not_flattened[:img.shape[0], :img.shape[1], :3] = img.astype(np.float32) / 255
+            dpg.add_raw_texture(w, h, img_normalized_not_flattened, tag=SC_C, format=dpg.mvFormat_Float_rgba)
+            IMG_TAG = dpg.draw_image(CR_PROC_TEXT, pmin=(0, 0), pmax=(dpg.get_viewport_width(), dpg.get_viewport_height()))
             with dpg.window(tag=DIM_W, label="Dimensions"):
                 dpg.add_slider_int(label="Width", tag=SC_WH, default_value=1900, min_value=100, max_value=2000)
                 dpg.add_slider_int(label="Height", tag=SC_HH, default_value=1080, min_value=100, max_value=2000)
@@ -381,7 +394,7 @@ def create_main_window(font):
         dpg.add_combo(label="Select window", tag=SEL_W, items=win_names, width=MW_W // 2,
                       callback=_change_active_window)
         dpg.add_combo(label="Select game", items=GAMES, width=MW_W // 2, callback=_change_game)
-        dpg.add_button(label="Debug mode:ON", width=MW_W, height=MW_H // 4, tag="Debug", callback=_change_debug_text, user_data="Debug")
+        # dpg.add_button(label="Debug mode:ON", width=MW_W, height=MW_H // 4, tag="Debug", callback=_change_debug_text, user_data="Debug")
         dpg.bind_font(font)
 
     dpg.set_primary_window(MAIN_WINDOW, True)

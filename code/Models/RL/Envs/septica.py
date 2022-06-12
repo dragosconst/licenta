@@ -1,4 +1,5 @@
 import copy
+import random
 
 import gym
 from gym import spaces
@@ -187,7 +188,7 @@ class SepticaEnv(gym.Env):
         self.played_cards = []  # the player always begins the match
         self.used_cards = set()
         self.is_challenging = False
-        self.is_first_player = False
+        self.is_first_player = random.randint(0, 2)
 
         self.player_points = 0
         self.adversary_points = 0
@@ -207,7 +208,7 @@ class SepticaEnv(gym.Env):
             agent = sa.get_septica_agent(self)
             # agent = None
             print(self._get_adv_obs())
-            action = agent.get_action_no_eps([agent.process_state(self._get_adv_obs())], eps=0)[0]
+            action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
             action, extra_info = action
             assert action is None or self.action_space.contains(action)
             if action == 0:

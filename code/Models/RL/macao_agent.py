@@ -447,7 +447,7 @@ class MacaoAgent:
         actions_as_idx_batch = [None] * len(q_next_sorted)
         # execution bottleneck
         for idx, actions_as_idx_state in enumerate(q_next_sorted):
-            processed_state = self.rebuild_state_for_train(batch_states[idx])
+            processed_state = self.rebuild_state_for_train(batch_nexts[idx])
             for action_idx in reversed(actions_as_idx_state):
                 action, extra_info = self.idx_to_action(action_idx)
                 if self.check_legal_action_rebuilt(processed_state, action, extra_info):
@@ -498,8 +498,8 @@ class MacaoAgent:
                 print(f"Avg reward so far is {sum(episodes_rewards)/len(episodes_rewards)}.")
                 print(f"Avg loss so far is {sum(avg_losses)/len(avg_losses)}.")
             if e % 50 == 0:
-                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_{e}_doubleq_7rewards.model")
-                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_{e}_doubleq_7rewards.model")
+                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_{e}_doubleq.model")
+                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_{e}_doubleq.model")
 
     def make_state_readable(self, state):
         hand, last_cards, cards_pot, drawing_contest, turns_contest, player_turns, adv_turns, adv_len, suits, pass_flag = state
@@ -557,7 +557,7 @@ class MacaoAgent:
             current_action, current_extra_info = actions[0]
             # print(f"Took action {current_action}, {current_extra_info}.")
             old_reward = ep_reward
-            new_state, reward, done = self.step(current_action, current_extra_info)
+            new_state, reward, done = self.step_random(current_action, current_extra_info)
             new_state_proc = self.process_state(new_state)
             ep_reward += reward
             # print(f"Got reward {reward}., total reward {ep_reward}")
@@ -584,8 +584,8 @@ class MacaoAgent:
         print(f"Average reward is {wins/num_iters*100}")
 
     def save_models(self):
-        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq_7rewards.model")
-        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq_7rewards.model")
+        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq.model")
+        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq.model")
 
 
 def get_macao_agent(env):
@@ -599,15 +599,28 @@ def get_macao_agent(env):
         torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq_7rewards.model"))
     return agent
 
+
+def get_macao_no7s(env):
+    agent = MacaoAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-3, pre_train_steps=300,
+                             eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.1, pre_train_steps=300,
+                                                                 final_eps_step=10 ** 5))
+    agent.total_steps = 1000
+    agent.q.load_state_dict(
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq.model"))
+    agent.q_target.load_state_dict(
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq.model"))
+    return agent
+
+
 if __name__ == "__main__":
     env = MacaoEnv()
 
-    macao_agent = MacaoAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-3, pre_train_steps=300,
-                             eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.1, pre_train_steps=300,
+    macao_agent = MacaoAgent(env=env, gamma=1, batch_size=64, replay_buff_size=2000, lr=1e-3, pre_train_steps=300,
+                             eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.05, pre_train_steps=300,
                                                                  final_eps_step=10 ** 5))
     macao_agent.total_steps = 1000
-    macao_agent.q.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq_7rewards.model"))
-    macao_agent.q_target.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq_7rewards.model"))
+    macao_agent.q.load_state_dict(torch.load("D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_q_doubleq.model"))
+    macao_agent.q_target.load_state_dict(torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\macao_ddqn_qtarget_doubleq.model"))
     macao_agent.get_statistics(10**4)
-    # macao_agent.train(max_episodes=10**4)
-    # macao_agent.save_models(
+    # macao_agent.train(max_episodes=int(1.1*10**4))
+    # macao_agent.save_models()

@@ -118,6 +118,18 @@ class SepticaAgent:
         return new_player_hand, new_first, new_used_cards, torch.as_tensor([value]), torch.as_tensor([is_first]),\
                torch.as_tensor([is_challenging])
 
+    def rebuild_state_for_train(self, processed_state: Tuple) -> Tuple:
+        player_hand, first_card, used_cards, value, is_first, is_challenging = processed_state
+        player_hand = [self.full_deck[idx] for idx in torch.nonzero(player_hand)]
+        used_cards = [self.full_deck[idx] for idx in torch.nonzero(used_cards)]
+        first_card = [self.full_deck[idx] for idx in torch.nonzero(first_card)]
+        if len(first_card) > 0:
+            first_card = first_card[0]
+        else:
+            first_card = None
+        return player_hand, first_card, used_cards, value[0].item(), is_first[0].item(), \
+                is_challenging[0].item()
+
     def check_legal_action(self, state, action, extra_info=None):
         player_hand_one_hot, first_card_one_hot, used_cards, value, is_first, is_challenging = state
         player_hand = set()
@@ -131,6 +143,24 @@ class SepticaAgent:
                 break
         is_first = is_first[0].item()
         is_challenging = is_challenging[0].item()
+
+        if action == 0:
+            assert extra_info is not None
+            card = extra_info
+            if card not in player_hand:
+                return False
+            elif is_first and first_card is None:
+                return True
+            elif is_first and is_challenging:
+                return card[0] == "7" or card[0] == first_card[0]
+            elif is_first and not is_challenging and first_card is not None:
+                return False
+            return True
+        elif action == 1:
+            return is_first and first_card is not None
+
+    def check_legal_action_rebuilt(self, state, action, extra_info):
+        player_hand, first_card, used_cards, value, is_first, is_challenging = state
 
         if action == 0:
             assert extra_info is not None
@@ -195,9 +225,10 @@ class SepticaAgent:
             q_hat_sorted = torch.argsort(q_hat, dim=1)
             actions = [None] * len(q_hat_sorted)
             for idx, q_actions_indexes in enumerate(q_hat_sorted):
+                rebuilt_state = self.rebuild_state_for_train(states[idx])
                 for aidx in reversed(q_actions_indexes):
                     action, extra_info = self.idx_to_action(aidx)
-                    if self.check_legal_action(states[idx], action, extra_info):
+                    if self.check_legal_action_rebuilt(rebuilt_state, action, extra_info):
                         actions[idx] = (action, extra_info)
                         break
         return actions
@@ -257,11 +288,14 @@ class SepticaAgent:
         actions_as_idx_batch = [None] * len(q_next_sorted)
         # execution bottleneck
         for idx, actions_as_idx_state in enumerate(q_next_sorted):
+            rebuilt_state = self.rebuild_state_for_train(batch_nexts[idx])
             for action_idx in reversed(actions_as_idx_state):
                 action, extra_info = self.idx_to_action(action_idx)
-                if self.check_legal_action(batch_states[idx], action, extra_info):
+                if self.check_legal_action_rebuilt(rebuilt_state, action, extra_info):
                     actions_as_idx_batch[idx] = action_idx
                     break
+            if actions_as_idx_batch[idx] is None:
+                actions_as_idx_batch[idx] = 0
         actions_as_idx_batch = torch.as_tensor(actions_as_idx_batch)
         actions_as_idx_batch = F.one_hot(actions_as_idx_batch, num_classes=NUM_ACTIONS)
         target_q = actions_as_idx_batch * q_next_target.cpu()  # use values estimated by q_target
@@ -309,12 +343,12 @@ class SepticaAgent:
                 print(f"Reward of last {print_freq} eps is {sum(running_mean_reward)/len(running_mean_reward)}")
                 print(f"Avg loss so far is {sum(avg_losses)/len(avg_losses)}.")
             if e % save_freq == 0:
-                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_{e}_doubleq_7pen_dep3_newrules.model")
-                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_{e}_doubleq_7pen_dep3_newrules.model")
+                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_{e}_doubleq_7pen_dep3_newrules_random.model")
+                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_{e}_doubleq_7pen_dep3_newrules_random.model")
 
     def save_models(self):
-        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_7pen_dep3_newrules.model")
-        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_7pen_dep3_newrules.model")
+        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_7pen_dep4_newrules_random.model")
+        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_7pen_dep4_newrules_random.model")
 
     def make_state_readable(self, state):
         player_hand, first_card, used_cards, value, is_first, is_challenging = state
@@ -398,9 +432,9 @@ def get_septica_agent(env):
                                                                  final_eps_step=10 ** 5))
     agent.total_steps = 1000
     agent.q.load_state_dict(
-        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_7pen_dep3_newrules.model"))
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_7pen_dep4_newrules_random.model"))
     agent.q_target.load_state_dict(
-        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_7pen_dep3_newrules.model"))
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_7pen_dep4_newrules_random.model"))
     return agent
 
 
@@ -411,6 +445,6 @@ if __name__ == "__main__":
                                  eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.05, pre_train_steps=300,
                                                                  final_eps_step=5*10 ** 4))
     septica_agent = get_septica_agent(env)
-    septica_agent.get_statistics(10 ** 2)
+    septica_agent.get_statistics(10 ** 4)
     # septica_agent.train(max_episodes=10**4)
     # septica_agent.save_models()

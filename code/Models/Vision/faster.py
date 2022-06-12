@@ -32,38 +32,11 @@ from torchvision.utils import draw_bounding_boxes
 from Data_Processing.detection_dataset import PlayingCardsFRCNNDataset
 from Utils.utils import intersection_over_union
 from Utils.eval import eval
-from references.engine import train_one_epoch, evaluate
 from Utils.utils import load_dataloader, get_loader, load_negative_dataloader
 from Utils.trans import RandomAffineBoxSensitive, RandomPerspectiveBoxSensitive
 from Data_Processing.detection_processing_resnet import second_nms, filter_under_thresh
 from Image_Processing.detection_draw import draw_detection
 import Utils.trans as T
-
-
-def train_frcnn_reference(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_dataloader: torch.utils.data.DataLoader,
-                          valid_dataloader: torch.utils.data.DataLoader,
-                          lr_scheduler: torch.optim.lr_scheduler.MultiStepLR, device: str, num_epochs: int= 30,
-                          start_from: int=None) -> None:
-    # gradient clipping
-    for p in model.parameters():
-        if p.requires_grad:
-            p.register_hook(lambda grad: torch.clamp(grad, -1, 1))
-
-    for epoch in range(num_epochs):
-        torch.cuda.empty_cache()
-        train_one_epoch(model, optimizer, train_dataloader, device, epoch, print_freq=10, accumulate=16)
-        # torch.save(frcnn.state_dict(), "D:\\facultate stuff\\licenta\\data\\frcnn_resnet50_5k_per_class_slices_e" + str(epoch +
-        #                                                                     (0 if start_from is None else start_from)) +
-        #     ".pt")
-        torch.save(frcnn.state_dict(), "/mnt/d/facultate stuff/licenta/data/frcnn_resnet50_5k_per_class_stretchedref_e" + str(epoch +
-                                                                            (0 if start_from is None else start_from)) +
-            ".pt")
-
-        # update learning rate
-        lr_scheduler.step()
-        # evaluate
-        # evaluate(model, valid_dataloader, device=device)
-        validate(model, valid_dataloader, device)
 
 
 def train_frcnn(model: torch.nn.Module, optimizer: torch.optim.Optimizer, train_dataloader: torch.utils.data.DataLoader,

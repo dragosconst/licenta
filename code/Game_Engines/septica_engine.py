@@ -113,7 +113,7 @@ class SepticaEngine(BaseEngine):
                 state = (self.player_hand, self.cards_down[0] if len(self.cards_down) > 0 else None, self.used_cards,\
                          play_value(self.cards_down), self.is_first_player, self.is_challenged)
                 state = self.agent.process_state(state)
-                action, extra_info = self.agent.get_action_no_eps([state], eps=0)[0]
+                action, extra_info = self.agent.get_action([state], eps=0)[0]
                 if action == 0:
                     print(f"Put down card {extra_info}.")
                     print(f"My cards are {self.player_hand}.")

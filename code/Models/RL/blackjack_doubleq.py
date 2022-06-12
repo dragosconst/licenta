@@ -127,23 +127,33 @@ class QAgent:
             state = local_env._get_obs()
         ini_env = copy.deepcopy(local_env)
         done = False
-        while not done:
-            action = self.select_action(state, eps)
-            output = local_env.step(action)
-            if len(output) == 2:
-                e1, e2 = output
-                next_state_e1 = e1._get_obs()
-                next_state_e2 = e2._get_obs()
-                self.update_q_values(0, state, action, next_state_e1, done)
-                self.update_q_values(0, state, action, next_state_e2, done)
-                self.run_episode(eps, e1)
-                self.run_episode(eps, e2)
-                done = True
-                continue
-            next_state, reward, done, info = output
-            self.update_q_values(reward, state, action, next_state, done)
-            state = next_state
-
+        states_replay = 1
+        if state[0] is not None and (int(state[0]) != 10 or int(
+                state[2]) != 10):  # first state was a split? in which case, do a state replay 3-4 times
+            states_replay = 4
+        if state[-1] and (int(state[1]) != 21 or int(state[2]) != 10):
+            states_replay = 4
+        while states_replay > 0:
+            local_env = copy.deepcopy(ini_env)
+            state = local_env._get_obs()
+            done = False
+            while not done:
+                action = self.select_action(state, eps)
+                output = local_env.step(action)
+                if len(output) == 2:
+                    e1, e2 = output
+                    next_state_e1 = e1._get_obs()
+                    next_state_e2 = e2._get_obs()
+                    self.update_q_values(0, state, action, next_state_e1, done)
+                    self.update_q_values(0, state, action, next_state_e2, done)
+                    self.run_episode(eps, e1)
+                    self.run_episode(eps, e2)
+                    done = True
+                    continue
+                next_state, reward, done, info = output
+                self.update_q_values(reward, state, action, next_state, done)
+                state = next_state
+            states_replay -= 1
     # print rough estimation of current performance of agent
     def print_value(self, epoch, print_freq, matches_num):
         if epoch > 0 and epoch % print_freq == 0:
@@ -160,7 +170,7 @@ class QAgent:
                 if transitions[-1][2] >= 1:
                     good += 1
             print(f"Win rate so far is {(good / (samples + extra)) * 100}%, epoch {epoch}.")
-            with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_doubleq_fixed.model",
+            with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_doubleq_replay.model",
                       "wb") as f:
                 pickle.dump(self, f)
 
@@ -176,10 +186,10 @@ if __name__ == "__main__":
     env2 = BlackjackEnvSplit(natural=True)
 
     bj_agent = QAgent(env2)
-    # bj_agent.train(num_epochs=int(3.5 * 10 ** 6))
-    # with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_doubleq_fixed.model", "wb") as f:
-    #     pickle.dump(bj_agent, f)
-    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_doubleq_fixed.model", "rb") as f:
+    bj_agent.train(num_epochs=int(3.5 * 10 ** 6))
+    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_doubleq_replay.model", "wb") as f:
+        pickle.dump(bj_agent, f)
+    with open("D:\\facultate stuff\\licenta\\data\\rl_models\\bj_doubleq_replay.model", "rb") as f:
         bj_agent = pickle.load(f)
 
     # --------------------------------
@@ -223,10 +233,10 @@ if __name__ == "__main__":
              "A,3", "A,4", "A,5", "A,6", "A,7", "A,8", "A,9", "A,10",
              "2,2", "3,3", "4,4", "5,5", "6,6", "7,7", "8,8", "9,9", "10,10", "A,A"]
     sn.heatmap(moves, xticklabels=xlabels, yticklabels=ylabs, linewidths=0.1, linecolor='gray')
-    plt.savefig("doubleq.png")
+    plt.savefig("doubleq_replay.png")
     plt.show()
 
-    samples = 5 * 10 ** 5
+    samples = 1 * 10 ** 6
     extras = 0
     good = 0
     neutral = 0

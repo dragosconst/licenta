@@ -113,7 +113,7 @@ class BlackjackEngine(BaseEngine):
             if len(self.player_hand) == 2 and self.player_hand[0] == self.player_hand[1]:
                 splittable = 10 if self.player_hand[0] in {"K", "Q", "J"} else int(self.player_hand[0])
             sum_player = sum_hand(self.player_hand)
-            if len(self.player_hand) == 2 and sum_player == 21: # natural blackjack
+            if len(self.player_hand) == 2 and sum_player == 21:  # natural blackjack
                 if self.splits_left == 0:
                     self.state = BJStates.DECIDING
                 else:
@@ -126,7 +126,7 @@ class BlackjackEngine(BaseEngine):
             state = (splittable, sum_player, 10 if self.dealer_hand[0] in {"K", "Q", "J"}
                      else int(self.dealer_hand[0]), ace)
 
-            action = self.agent.get_action_no_eps(state)
+            action = self.agent.get_action(state)
             if action == 0:  # STAND
                 print(f"I'm standing.")
                 print(f"My cards are {self.player_hand}.")
