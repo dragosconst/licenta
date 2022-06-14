@@ -269,7 +269,7 @@ class SepticaAgent:
         avg_loss = (total_loss/num_loss_comp if num_loss_comp else 0)
         return ep_reward, avg_loss, epsilon
 
-    def train_step(self):
+    def train_step(self, debug: bool=False):
         train_batch = self.replay_buffer.sample(batch_size=self.batch_size)
         batch_states = [x[0] for x in train_batch]
         batch_actions = torch.as_tensor([x[1] for x in train_batch])
@@ -343,12 +343,12 @@ class SepticaAgent:
                 print(f"Reward of last {print_freq} eps is {sum(running_mean_reward)/len(running_mean_reward)}")
                 print(f"Avg loss so far is {sum(avg_losses)/len(avg_losses)}.")
             if e % save_freq == 0:
-                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_{e}_doubleq_7pen_dep3_newrules_random.model")
-                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_{e}_doubleq_7pen_dep3_newrules_random.model")
+                torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_{e}_doubleq_7pen_dep3_newrules_true_random.model")
+                torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_{e}_doubleq_7pen_dep3_newrules_true_random.model")
 
     def save_models(self):
-        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_7pen_dep4_newrules_random.model")
-        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_7pen_dep4_newrules_random.model")
+        torch.save(self.q.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_7pen_dep4_newrules_true_random.model")
+        torch.save(self.q_target.state_dict(), f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_7pen_dep4_newrules_true_random.model")
 
     def make_state_readable(self, state):
         player_hand, first_card, used_cards, value, is_first, is_challenging = state
@@ -407,7 +407,7 @@ class SepticaAgent:
             # print("-"*50)
 
             current_state = new_state_proc
-            self.total_steps += 1
+            # self.total_steps += 1
 
             if done:
                 if old_reward is not None and ep_reward - old_reward >= 70:
@@ -432,16 +432,16 @@ def get_septica_agent(env):
                                                                  final_eps_step=10 ** 5))
     agent.total_steps = 1000
     agent.q.load_state_dict(
-        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_7pen_dep4_newrules_random.model"))
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_19800_doubleq_agent1.model"))
     agent.q_target.load_state_dict(
-        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_doubleq_7pen_dep4_newrules_random.model"))
+        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_19800_doubleq_agent1.model"))
     return agent
 
 
 if __name__ == "__main__":
     env = SepticaEnv()
 
-    septica_agent = SepticaAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-3, pre_train_steps=300,
+    septica_agent = SepticaAgent(env=env, gamma=1, batch_size=64, replay_buff_size=2000, lr=1e-3, pre_train_steps=300,
                                  eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.05, pre_train_steps=300,
                                                                  final_eps_step=5*10 ** 4))
     septica_agent = get_septica_agent(env)

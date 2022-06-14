@@ -87,7 +87,7 @@ class SepticaEnv(gym.Env):
     def _get_adv_obs(self):
         return self.adversary_hand, self.played_cards[0] if len(self.played_cards) > 0 else None, \
                self.used_cards, play_value(self.played_cards), \
-               not self.is_first_player, self.is_challenging or len(self.played_cards) == 1
+               not self.is_first_player, self.is_challenging or (len(self.played_cards) == 1 and not self.is_first_player)
 
     def check_legal_put(self, card):
         if not self.is_challenging:
@@ -187,12 +187,100 @@ class SepticaEnv(gym.Env):
         self.adversary_hand, self.deck = draw_hand(self.deck, self.np_random)
         self.played_cards = []  # the player always begins the match
         self.used_cards = set()
-        self.is_challenging = False
         self.is_first_player = random.randint(0, 2)
+        # self.is_first_player = True
+        self.is_challenging = not self.is_first_player
 
         self.player_points = 0
         self.adversary_points = 0
         return self._get_obs()
+
+    def action_processing_individual(self, my_hand: int, is_first, action, extra_info):
+        if my_hand == 1:
+            my_hand = self.player_hand
+        else:
+            my_hand = self.adversary_hand
+        reward = 0
+        first_ret = is_first
+        if action == 0:
+            # put down card
+            assert extra_info is not None
+            card = extra_info
+            # assert self.check_legal_put(card)
+            if card[0] == "7" and play_value(self.played_cards) == 0:
+                # discourage from wasting 7s
+                reward -= 0.5 * REWARD_MULT
+            my_hand.remove(card)
+            self.played_cards.append(card)
+            self.used_cards.update(self.played_cards)
+            self.is_challenging = self.check_start_challenge(card)
+        elif action == 1:
+            # can only come here if they are the first player
+            assert is_first
+            assert len(self.played_cards) > 0  # can't end hand before playing
+            # end hand
+            if self.is_challenging:
+                won = False
+                if set(my_hand) == set(self.player_hand):
+                    self.adversary_points += play_value(self.played_cards) * REWARD_MULT
+                else:
+                    self.player_points += play_value(self.played_cards) * REWARD_MULT
+                reward -= play_value(self.played_cards) * REWARD_MULT
+            else:
+                won = True
+                if set(my_hand) == set(self.adversary_hand):
+                    self.player_points += play_value(self.played_cards) * REWARD_MULT
+                else:
+                    self.adversary_points += play_value(self.played_cards) * REWARD_MULT
+                reward += play_value(self.played_cards) * REWARD_MULT
+            self.used_cards.update(self.played_cards)
+            self.played_cards = []
+            if len(self.deck) > 0:
+                self.player_hand, self.adversary_hand, self.deck = draw_until(self.deck, self.player_hand,
+                                                                              self.adversary_hand, 4, self.np_random)
+            first_ret = won
+            self.is_challenging = False
+        return reward, first_ret
+
+    def _get_special_obs(self, my_hand: int, is_first: bool):
+        base_body = self.played_cards[0] if len(self.played_cards) > 0 else None, \
+               self.used_cards, play_value(self.played_cards)
+        if my_hand == 1:
+            my_tuple = self.player_hand, *base_body,\
+               is_first, self.is_challenging
+            enemy_tuple = self.adversary_hand, *base_body, \
+               not is_first, self.is_challenging
+        else:
+            my_tuple = self.adversary_hand, *base_body,\
+               is_first, self.is_challenging
+            enemy_tuple = self.player_hand, *base_body, \
+               not is_first, self.is_challenging
+        return my_tuple, enemy_tuple
+
+    def step_individual(self, my_hand: int, is_first: bool, action, extra_info=None):
+        if not (len(self.played_cards) == 0 and not is_first):
+            reward, is_first = self.action_processing_individual(my_hand, is_first, action, extra_info)
+        else:
+            reward = 0
+
+        my_hand_idx = my_hand
+        if my_hand == 1:  # the player hand agen
+            my_hand = self.player_hand
+            multip = (1 if self.player_points > self.adversary_points else -1)
+        else:  # the adversary agent
+            my_hand = self.adversary_hand
+            multip = (1 if self.player_points < self.adversary_points else -1)
+
+        done = 0
+        if len(self.deck) == 0 and len(my_hand) == 0 and len(self.played_cards) == 0:
+            reward += 5 * multip * REWARD_MULT  # might have no effect
+            done = 1
+        if not done and self.player_points + self.adversary_points == 8 * REWARD_MULT:
+            done = 1
+            reward += 5 * multip * REWARD_MULT  # might have no effect
+        # print(is_first)
+        return *self._get_special_obs(my_hand_idx, is_first), reward, done
+
 
     def step_agent(self, action, extra_info=None):
         if not (len(self.played_cards) == 0 and not self.is_first_player):
@@ -240,7 +328,6 @@ class SepticaEnv(gym.Env):
                                                                                   self.np_random)
                 self.is_first_player = won
                 self.is_challenging = False
-            print(self._get_obs())
 
         done = 0
         if len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:

@@ -293,9 +293,9 @@ class MacaoEnv(gym.Env):
         done = 1 if final != 0 else 0
 
         if not done:
-            # agent = ma.get_macao_agent(self)
-            agent = None
-            action = agent.get_action_no_eps([agent.process_state(self._get_adv_obs())], eps=0)[0]
+            agent = ma.get_macao_agent(self)
+            # agent = None
+            action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
             action, extra_info = action
             assert action is None or self.action_space.contains(action)
             reward = 0
@@ -500,21 +500,21 @@ class MacaoEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    # env = MacaoEnv()
-    # env.reset()
+    env = MacaoEnv()
+    env.reset()
+
+    while not env.render():
+        continue
+
+    # wins = 0
+    # for match in trange(10 ** 4):
+    #     env = MacaoEnv()
+    #     env.reset()
     #
-    # while not env.render():
-    #     continue
-
-    wins = 0
-    for match in trange(10 ** 4):
-        env = MacaoEnv()
-        env.reset()
-
-        state, reward, done = env.agent_fight()
-        while not done:
-            old_reward = reward
-            state, reward, done = env.agent_fight()
-        if reward > 0 and reward - old_reward >= 70:
-            wins += 1
-    print(f"Wr of no 7s is {wins/(10**4)*(10**2):.4f}%")
+    #     state, reward, done = env.agent_fight()
+    #     while not done:
+    #         old_reward = reward
+    #         state, reward, done = env.agent_fight()
+    #     if reward > 0 and reward - old_reward >= 70:
+    #         wins += 1
+    # print(f"Wr of no 7s is {wins/(10**4)*(10**2):.4f}%")

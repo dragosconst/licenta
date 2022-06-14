@@ -28,7 +28,7 @@ class SepticaMinmax:
         if not self.first_player == player:
             # when there's a challenge going on, every player but the first player can put down anything
             return len(self.played_cards) > 0
-        return card[0] == "7" or card[0] == self.played_cards[0][0]
+        return card[0] == "7" or (len(self.played_cards) == 0 and player == self.first_player) or card[0] == self.played_cards[0][0]
 
     def card_is_challenge(self, card, new_played_cards):
         return card[0] == "7" or card[0] == new_played_cards[0][0] or len(new_played_cards) == 1
