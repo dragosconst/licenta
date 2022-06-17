@@ -25,6 +25,7 @@ from Game_Engines.base_engine import BaseEngine
 from Game_Engines.septica_engine import SepticaEngine
 from Models.RL.septica_agent import get_septica_agent
 from Models.RL.Envs.septica import SepticaEnv
+from Models.RL.Envs.macao import main as play_macao
 
 # window names and other constants
 
@@ -67,7 +68,7 @@ SEL_W = "selectw"
 
 # cards game specific constants
 # -----------------------------
-GAMES = ["Blackjack", "Razboi", "Macao", "Septica"]
+GAMES = ["Blackjack", "Macao", "Septica"]
 current_game = None  # type: str
 current_game_engine = None  # type: BaseEngine
 
@@ -362,6 +363,8 @@ def _change_game(sender, app_data, user_data):
         dpg.set_value(DET_NO, 3)
         dpg.set_value(MIN_DET, 0.1)
         dpg.set_value(RAD, 200)
+    elif current_game == "Macao":
+        play_macao()
 
 
 def update_agent():

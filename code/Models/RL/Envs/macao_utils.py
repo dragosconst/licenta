@@ -1,6 +1,9 @@
 from typing import List, Tuple
 import random
 
+import torch
+
+# import Models.RL.macao_agent as ma
 
 def draw_card(deck: List, np_random) -> Tuple[str, List]:
     card = np_random.choice(deck)
@@ -81,3 +84,4 @@ def get_card_suite(card):
 
 def same_suite(suite, card):
     return len(list(set(suite) & set(get_card_suite(card)))) != 0
+

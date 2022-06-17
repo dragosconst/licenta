@@ -12,7 +12,7 @@ from Models.RL.Envs.macao_minmax import alpha_beta, State, MacaoMinmax
 from Models.RL.Envs.macao_random import MacaoRandom
 from Models.RL.Envs.macao_utils import build_deck, draw_cards, draw_card, draw_hand,get_last_5_cards, get_card_suite, same_suite, shuffle_deck,\
                                         check_if_deck_empty
-import Models.RL.macao_agent as ma
+
 
 class MacaoEnv(gym.Env):
     """
@@ -293,6 +293,7 @@ class MacaoEnv(gym.Env):
         done = 1 if final != 0 else 0
 
         if not done:
+            import Models.RL.macao_agent as ma
             agent = ma.get_macao_agent(self)
             # agent = None
             action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
@@ -354,6 +355,7 @@ class MacaoEnv(gym.Env):
         return self._get_obs(), reward + final, done
 
     def agent_fight(self):
+        import Models.RL.macao_agent as ma
         agent = ma.get_macao_no7s(self)
         # agent = None
         action = agent.get_action([agent.process_state(self._get_obs())], eps=0)[0]
@@ -418,6 +420,7 @@ class MacaoEnv(gym.Env):
         final = self.final_state()
         done = 1 if final != 0 else 0
         if not done:
+            import Models.RL.macao_agent as ma
             agent = ma.get_macao_agent(self)
             # agent = None
             action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
@@ -499,7 +502,7 @@ class MacaoEnv(gym.Env):
         return done
 
 
-if __name__ == "__main__":
+def main():
     env = MacaoEnv()
     env.reset()
 
@@ -518,3 +521,7 @@ if __name__ == "__main__":
     #     if reward > 0 and reward - old_reward >= 70:
     #         wins += 1
     # print(f"Wr of no 7s is {wins/(10**4)*(10**2):.4f}%")
+
+
+if __name__ == "__main__":
+    main()
