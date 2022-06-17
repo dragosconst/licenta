@@ -410,7 +410,7 @@ class SepticaAgent:
             # self.total_steps += 1
 
             if done:
-                if old_reward is not None and ep_reward - old_reward >= 70:
+                if old_reward is not None and ep_reward - old_reward >= 30:
                     done = 1
                 else:
                     done = -1
@@ -426,17 +426,30 @@ class SepticaAgent:
             wins += 1 if reward > 0 else 0
         print(f"Average win rate is {wins/num_iters*100}")
 
-def get_septica_agent(env):
+def get_septica_agent(env, which="adversarial"):
     agent = SepticaAgent(env=env, gamma=1, batch_size=64, replay_buff_size=512, lr=1e-3, pre_train_steps=300,
                              eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.1, pre_train_steps=300,
                                                                  final_eps_step=10 ** 5))
     agent.total_steps = 1000
-    agent.q.load_state_dict(
-        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_19800_doubleq_agent1.model"))
-    agent.q_target.load_state_dict(
-        torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_19800_doubleq_agent1.model"))
+    if which == "adversarial":
+        agent.q.load_state_dict(
+            torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_19800_doubleq_agent1.model"))
+        agent.q_target.load_state_dict(
+            torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_19800_doubleq_agent1.model"))
+    elif which == "true":
+        agent.q.load_state_dict(
+            torch.load(f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_7pen_dep4_newrules_true_random.model"))
+        agent.q_target.load_state_dict(
+            torch.load(
+                f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_19800_doubleq_agent1.model"))
+    else:
+        agent.q.load_state_dict(
+            torch.load(
+                f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_q_doubleq_7pen_dep4_newrules_random.model"))
+        agent.q_target.load_state_dict(
+            torch.load(
+                f"D:\\facultate stuff\\licenta\\data\\rl_models\\septica_ddqn_qtarget_19800_doubleq_agent1.model"))
     return agent
-
 
 if __name__ == "__main__":
     env = SepticaEnv()
@@ -444,7 +457,7 @@ if __name__ == "__main__":
     septica_agent = SepticaAgent(env=env, gamma=1, batch_size=64, replay_buff_size=2000, lr=1e-3, pre_train_steps=300,
                                  eps_scheduler=LinearScheduleEpsilon(start_eps=1, final_eps=0.05, pre_train_steps=300,
                                                                  final_eps_step=5*10 ** 4))
-    septica_agent = get_septica_agent(env)
+    septica_agent = get_septica_agent(env, which="adversarial")
     septica_agent.get_statistics(10 ** 4)
     # septica_agent.train(max_episodes=10**4)
     # septica_agent.save_models()

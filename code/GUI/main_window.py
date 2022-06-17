@@ -175,13 +175,15 @@ def _get_screen_area():
             x = 0
             y = 0
             img = grab_screen_area(x, y, w, h)
-            img = cv.cvtColor(img, cv.COLOR_BGRA2RGBA)
+            img = cv.cvtColor(img, cv.COLOR_BGRA2RGB)
             # img = cv.resize(img, (SC_STDW, SC_STDH))
-            img = img.flatten().astype(np.float32)
+            # img = img.flatten().astype(np.float32)
             img_normalized_not_flattened = np.zeros((h, w, 3), dtype=np.float32)
+            print(img.shape, (h, w))
             img_normalized_not_flattened[:img.shape[0], :img.shape[1], :3] = img.astype(np.float32) / 255
-            dpg.add_raw_texture(w, h, img_normalized_not_flattened, tag=SC_C, format=dpg.mvFormat_Float_rgba)
-            IMG_TAG = dpg.draw_image(CR_PROC_TEXT, pmin=(0, 0), pmax=(dpg.get_viewport_width(), dpg.get_viewport_height()))
+            with dpg.texture_registry(show=False):
+                dpg.add_raw_texture(width=w, height=h, default_value=img_normalized_not_flattened, tag=SC_C, format=dpg.mvFormat_Float_rgb)
+            IMG_TAG = dpg.draw_image(SC_C, pmin=(0, 0), pmax=(dpg.get_viewport_width(), dpg.get_viewport_height()))
             with dpg.window(tag=DIM_W, label="Dimensions"):
                 dpg.add_slider_int(label="Width", tag=SC_WH, default_value=1900, min_value=100, max_value=2000)
                 dpg.add_slider_int(label="Height", tag=SC_HH, default_value=1080, min_value=100, max_value=2000)

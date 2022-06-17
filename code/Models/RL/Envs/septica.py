@@ -4,10 +4,11 @@ import random
 import gym
 from gym import spaces
 from gym.utils import seeding
+from tqdm import trange
 
 from Models.RL.Envs.septica_utils import draw_card, draw_hand, build_deck, play_value, draw_until, shuffle_deck, REWARD_MULT
 from Models.RL.Envs.septica_minmax import SepticaMinmax, alpha_beta, SepticaState
-import Models.RL.septica_agent as sa
+# import Models.RL.septica_agent as sa
 
 
 def deepc(object):
@@ -281,6 +282,64 @@ class SepticaEnv(gym.Env):
         # print(is_first)
         return *self._get_special_obs(my_hand_idx, is_first), reward, done
 
+    def agent_fight(self):
+        if not (len(self.played_cards) == 0 and not self.is_first_player):
+            # agent1 = sa.get_septica_agent(self, which="true")
+            agent1 = None
+            action = agent1.get_action([agent1.process_state(self._get_obs())], eps=0)[0]
+            action, extra_info = action
+            reward = self.action_processing(action, extra_info)
+        else:
+            reward = 0
+        done = 0
+        if len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:
+            # reward += 5 * (1 if self.player_points > self.adversary_points else -1) # might have no effect
+            done = 1
+
+        if not done and not (len(self.played_cards) == 0 and self.is_first_player):
+            # agent = sa.get_septica_agent(self, which="fake")
+            agent = None
+            action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
+            action, extra_info = action
+            assert action is None or self.action_space.contains(action)
+            if action == 0:
+                # put down card
+                assert extra_info is not None
+                card = extra_info
+                # assert self.check_legal_put(card)
+                self.adversary_hand.remove(card)
+                self.played_cards.append(card)
+                self.used_cards.update(self.played_cards)
+                self.is_challenging = self.check_start_challenge(card)
+            elif action == 1:
+                assert not self.is_first_player
+                assert len(self.played_cards) > 0  # can't end hand before playing
+                # end hand
+                if self.is_challenging:
+                    won = True
+                    self.player_points += play_value(self.played_cards) * REWARD_MULT
+                    reward += play_value(self.played_cards) * REWARD_MULT
+                else:
+                    won = False
+                    self.adversary_points += play_value(self.played_cards) * REWARD_MULT
+                    reward -= play_value(self.played_cards) * REWARD_MULT
+                self.used_cards.update(self.played_cards)
+                self.played_cards = []
+                if len(self.deck) > 0:
+                    self.player_hand, self.adversary_hand, self.deck = draw_until(self.deck, self.player_hand,
+                                                                                  self.adversary_hand, 4,
+                                                                                  self.np_random)
+                self.is_first_player = won
+                self.is_challenging = False
+
+        done = 0
+        if len(self.deck) == 0 and len(self.player_hand) == 0 and len(self.played_cards) == 0:
+            reward += 5 * (1 if self.player_points > self.adversary_points else -1) * REWARD_MULT  # might have no effect
+            if self.player_points == self.adversary_points:
+                reward -= 5 * (1 if self.player_points > self.adversary_points else -1) * REWARD_MULT
+            done = 1
+
+        return self._get_obs(), reward, done
 
     def step_agent(self, action, extra_info=None):
         if not (len(self.played_cards) == 0 and not self.is_first_player):
@@ -293,8 +352,8 @@ class SepticaEnv(gym.Env):
             done = 1
 
         if not done and not (len(self.played_cards) == 0 and self.is_first_player):
-            agent = sa.get_septica_agent(self)
-            # agent = None
+            # agent = sa.get_septica_agent(self)
+            agent = None
             print(self._get_adv_obs())
             action = agent.get_action([agent.process_state(self._get_adv_obs())], eps=0)[0]
             action, extra_info = action
@@ -350,11 +409,12 @@ class SepticaEnv(gym.Env):
             action = action.split(" ")
             if len(action) >= 2:
                 extra_info = " ".join(action[1:])
+                extra_info = extra_info.replace(extra_info[0], extra_info[0].upper())
         else:
             action = "0"
             extra_info = None
         action = int(action[0])
-        _, reward, done = self.step_agent(action, extra_info)
+        _, reward, done = self.step(action, extra_info)
         print(f"Pot after adv move: {self.played_cards}.")
         print(f"You got a reward of {reward}.")
         print("-"*100)
@@ -362,9 +422,27 @@ class SepticaEnv(gym.Env):
             print(f"Game done.")
         return done
 
+
 if __name__ == "__main__":
     env = SepticaEnv()
     env.reset()
 
     while not env.render():
         continue
+
+    # wins = 0
+    # loss = 0
+    # for match in trange(10 ** 4):
+    #     env = SepticaEnv()
+    #     env.reset()
+    #
+    #     _, reward, done = env.agent_fight()
+    #     while not done:
+    #         old_reward = reward
+    #         _, reward, done = env.agent_fight()
+    #     if reward > 0 and reward - old_reward >= 30:
+    #         wins += 1
+    #     elif reward < 0 and reward - old_reward <= -30:
+    #         loss += 1
+    # print(f"Wr of real random is {wins/(10**4)*(10**2):.4f}%")
+    # print(f"Wr of fake random is {loss/(10**4)*(10**2):.4f}%")
